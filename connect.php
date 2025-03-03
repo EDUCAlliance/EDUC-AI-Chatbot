@@ -111,6 +111,7 @@ if (!hash_equals($generatedDigest, strtolower($signature))) {
 // 3. Extract the message
 // Retrieve the message content from the payload
 $message = $data['object']['content'];
+$full_message = var_dump($data['object']);
 
 // load JSON config file to get botMention
 $configContent = file_get_contents(getenv('AI_CONFIG_FILE'));
@@ -137,7 +138,7 @@ $apiUrl = 'https://' . getenv('NC_URL') . '/ocs/v2.php/apps/spreed/api/v1/bot/' 
 
 // Prepare the request body with the message, a unique reference ID, and the ID of the original message
 $requestBody = [
-    'message' => getLLMResponse($message, getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT'), getenv('AI_CONFIG_FILE')),
+    'message' => getLLMResponse($message, getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT'), getenv('AI_CONFIG_FILE')).'--'.$full_message,
     'referenceId' => sha1($random), // A unique reference ID for tracking
     'replyTo' => (int) $data['object']['id'], // ID of the original message being replied to
 ];
