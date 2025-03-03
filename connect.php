@@ -85,7 +85,7 @@ function getLLMResponse($userMessage, $apiKey, $endpoint, $model, $configFilePat
 }
 
 
-//loadEnv('/app/code/.env');
+loadEnv('/app/code/.env');
 
 
   
