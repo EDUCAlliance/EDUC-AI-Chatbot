@@ -173,5 +173,3 @@ curl_close($ch);
 
 // Optional: Log or handle the response for debugging purposes
 ?>
-
-?>

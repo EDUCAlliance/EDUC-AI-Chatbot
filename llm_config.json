@@ -3,5 +3,7 @@
     "responseExamples": [
         { "role": "user", "content": "Hi" },
         { "role": "assistant", "content": "Hi there. I am the EDUC Helping Chatbot. How can i help you?" }
-    ]
+    ],
+    "model": "qwen2.5-72b-instruct",
+    "botMention": "educai2"
 }
