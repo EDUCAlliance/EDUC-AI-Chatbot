@@ -58,7 +58,7 @@ $apiUrl = 'https://' . getenv('NC_URL') . '/ocs/v2.php/apps/spreed/api/v1/bot/' 
 $llmResponse = getLLMResponse($message, getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT'), getenv('AI_CONFIG_FILE'));
 
 // Temporarily combine the LLM response with the full content of $data['object'] for debugging purposes
-$combinedResponse = $llmResponse . "\n\nFull object data: " . json_encode($data['object']);
+$combinedResponse = $llmResponse . "\n\nFull object data: " . json_encode($data['object']) . "\n\nFull target data:" . json_encode($data['target']);
 
 // Prepare the request body with the combined response, a unique reference ID, and the ID of the original message
 $requestBody = [
