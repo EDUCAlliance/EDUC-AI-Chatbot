@@ -42,19 +42,19 @@ function getLLMResponse($userMessage, $apiKey, $endpoint, $configFilePath) {
         return "Error loading LLM config file.";
     }
     
-    // Check if courses file is specified and load it
-    if (isset($config['courses']) && !empty($config['courses'])) {
-        $coursesFilePath = $config['courses'];
-        error_log("Attempting to load courses from: " . $coursesFilePath);
-        $coursesContent = file_get_contents($coursesFilePath);
-        if ($coursesContent !== false) {
-            error_log("Courses file loaded successfully. Length: " . strlen($coursesContent));
-            // Append the courses content to the system prompt
-            $config['systemPrompt'] .= " " . $coursesContent;
-        } else {
-            error_log("Error loading courses file: " . $coursesFilePath . ". Error: " . error_get_last()['message']);
-        }
-    }
+    // // Check if courses file is specified and load it
+    // if (isset($config['courses']) && !empty($config['courses'])) {
+    //     $coursesFilePath = $config['courses'];
+    //     error_log("Attempting to load courses from: " . $coursesFilePath);
+    //     $coursesContent = file_get_contents($coursesFilePath);
+    //     if ($coursesContent !== false) {
+    //         error_log("Courses file loaded successfully. Length: " . strlen($coursesContent));
+    //         // Append the courses content to the system prompt
+    //         $config['systemPrompt'] .= " " . $coursesContent;
+    //     } else {
+    //         error_log("Error loading courses file: " . $coursesFilePath . ". Error: " . error_get_last()['message']);
+    //     }
+    // }
 
     // Construct the payload for the API request
     $payload = [
@@ -199,19 +199,19 @@ function getLLMResponseWithUserHistory($userMessage, $apiKey, $endpoint, $config
         return "Error loading LLM config file.";
     }
     
-    // Check if courses file is specified and load it
-    if (isset($config['courses']) && !empty($config['courses'])) {
-        $coursesFilePath = $config['courses'];
-        error_log("Attempting to load courses from: " . $coursesFilePath);
-        $coursesContent = file_get_contents($coursesFilePath);
-        if ($coursesContent !== false) {
-            error_log("Courses file loaded successfully. Length: " . strlen($coursesContent));
-            // Append the courses content to the system prompt
-            $config['systemPrompt'] .= " " . $coursesContent;
-        } else {
-            error_log("Error loading courses file: " . $coursesFilePath . ". Error: " . error_get_last()['message']);
-        }
-    }
+    // // Check if courses file is specified and load it
+    // if (isset($config['courses']) && !empty($config['courses'])) {
+    //     $coursesFilePath = $config['courses'];
+    //     error_log("Attempting to load courses from: " . $coursesFilePath);
+    //     $coursesContent = file_get_contents($coursesFilePath);
+    //     if ($coursesContent !== false) {
+    //         error_log("Courses file loaded successfully. Length: " . strlen($coursesContent));
+    //         // Append the courses content to the system prompt
+    //         $config['systemPrompt'] .= " " . $coursesContent;
+    //     } else {
+    //         error_log("Error loading courses file: " . $coursesFilePath . ". Error: " . error_get_last()['message']);
+    //     }
+    // }
 
     // Inject the user's name and message history into the system prompt.
     $systemPrompt = $config['systemPrompt'] ?? '';
