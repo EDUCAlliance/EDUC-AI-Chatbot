@@ -33,16 +33,8 @@ $message = $data['object']['content'];
 $name_of_user = $data['actor']['name'];
 $id_of_user = $data['actor']['id'];
 logUserMessage($id_of_user, $message);
-$history = getUserMessageHistory($id_of_user);
-  // Build the history string.
-  $historyString = "\n--- Last 50 messages from $name_of_user ---\n";
-  foreach ($history as $entry) {
-      $historyString .= "[" . $entry['timestamp'] . "] " . $entry['message'] . "\n";
-  }
-  
-  // New system prompt: include the user name, the original prompt, and the message history.
-  $newSystemPrompt = "User Name: $name_of_user\n\n" . $historyString;
 
+  
 // Load JSON configuration file to get bot mention details
 $configContent = file_get_contents(getenv('AI_CONFIG_FILE'));
 if ($configContent === false) {
