@@ -30,6 +30,8 @@ if (!hash_equals($generatedDigest, strtolower($signature))) {
 // 3. Extract the message
 // Retrieve the message content from the payload
 $message = $data['object']['content'];
+$name_of_user = $data['actor']['name'];
+$id_of_user = $data['actor']['id'];
 
 // Load JSON configuration file to get bot mention details
 $configContent = file_get_contents(getenv('AI_CONFIG_FILE'));
