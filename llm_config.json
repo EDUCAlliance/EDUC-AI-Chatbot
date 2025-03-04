@@ -6,5 +6,5 @@
     ],
     "model": "qwen2.5-72b-instruct",
     "botMention": "educai",
-    "courses": "lo_as_json.txt"
+    "courses": ""
 }
