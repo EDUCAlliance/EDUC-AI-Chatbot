@@ -34,6 +34,14 @@ $name_of_user = $data['actor']['name'];
 $id_of_user = $data['actor']['id'];
 logUserMessage($id_of_user, $message);
 $history = getUserMessageHistory($id_of_user);
+  // Build the history string.
+  $historyString = "\n--- Last 50 messages from $name_of_user ---\n";
+  foreach ($history as $entry) {
+      $historyString .= "[" . $entry['timestamp'] . "] " . $entry['message'] . "\n";
+  }
+  
+  // New system prompt: include the user name, the original prompt, and the message history.
+  $newSystemPrompt = "User Name: $name_of_user\n\n" . $historyString;
 
 // Load JSON configuration file to get bot mention details
 $configContent = file_get_contents(getenv('AI_CONFIG_FILE'));
@@ -59,7 +67,7 @@ $token = $data['target']['id'];
 $apiUrl = 'https://' . getenv('NC_URL') . '/ocs/v2.php/apps/spreed/api/v1/bot/' . $token . '/message';
 
 // Get the LLM response
-$llmResponse = getLLMResponse($message, getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT'), getenv('AI_CONFIG_FILE')). '/n - History:'. $history;
+$llmResponse = getLLMResponse($message, getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT'), getenv('AI_CONFIG_FILE')). '/n - History:'. $newSystemPrompt;
 
 // Prepare the request body with the combined response, a unique reference ID, and the ID of the original message
 $requestBody = [
