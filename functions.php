@@ -50,7 +50,7 @@ function getLLMResponse($userMessage, $apiKey, $endpoint, $configFilePath) {
         if ($coursesContent !== false) {
             error_log("Courses file loaded successfully. Length: " . strlen($coursesContent));
             // Trim the courses content to the first 10000 characters
-            $coursesContent = substr($coursesContent, 0, 10000);
+            $coursesContent = substr($coursesContent, 0, 100000);
             error_log("Courses content trimmed to 10000 characters");
             // Append the courses content to the system prompt
             $config['systemPrompt'] .= " " . $coursesContent;
@@ -210,7 +210,7 @@ function getLLMResponseWithUserHistory($userMessage, $apiKey, $endpoint, $config
         if ($coursesContent !== false) {
             error_log("Courses file loaded successfully. Length: " . strlen($coursesContent));
             // Trim the courses content to the first 10000 characters
-            $coursesContent = substr($coursesContent, 0, 10000);
+            $coursesContent = substr($coursesContent, 0, 100000);
             error_log("Courses content trimmed to 10000 characters");
             // Append the courses content to the system prompt
             $config['systemPrompt'] .= " " . $coursesContent;
