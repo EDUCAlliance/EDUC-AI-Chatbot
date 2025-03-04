@@ -3,6 +3,14 @@ This is the code for our chatbot, which will then be used as a bot for Nextcloud
 
 This is a project within the EDUC ThinkLab
 
+An .env file needs to be added (file-path is in the loadenv function call) with the following vars:
+```
+BOT_TOKEN=XXXXX 
+AI_API_KEY=XXXXXXXXX
+NC_URL=domain-of-nextcloud-server.de
+AI_API_ENDPOINT=https://chat-ai.academiccloud.de/v1/chat/completions
+AI_CONFIG_FILE=llm_config.json
+```
 
 install guide
 First of all, you have to install a bot. The term “register” would almost be more appropriate here, as you simply tell Nextcloud to send a webhook to a specific URL after each message (as soon as this bot is activated in the chat) - It is also important to remember the secret token, because the script must encrypt the message with this token in order to be able to respond back
