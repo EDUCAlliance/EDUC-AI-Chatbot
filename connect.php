@@ -61,7 +61,7 @@ $apiUrl = 'https://' . getenv('NC_URL') . '/ocs/v2.php/apps/spreed/api/v1/bot/' 
 
 // Get the LLM response
 //$llmResponse = getLLMResponse($message, getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT'), getenv('AI_CONFIG_FILE')). '/n - History:'. $newSystemPrompt;
-$llmResponse = getLLMResponseWithUserHistory($message, getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT'), getenv('AI_CONFIG_FILE'), $name_of_user, $id_of_user);
+$llmResponse = getLLMResponseWithUserHistory($message, getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT'), getenv('AI_CONFIG_FILE'), $name_of_user, $id_of_user).'test';
 
 
 // Prepare the request body with the combined response, a unique reference ID, and the ID of the original message
