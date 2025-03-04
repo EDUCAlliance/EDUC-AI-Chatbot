@@ -32,7 +32,6 @@ if (!hash_equals($generatedDigest, strtolower($signature))) {
 $message = $data['object']['content'];
 $name_of_user = $data['actor']['name'];
 $id_of_user = $data['actor']['id'];
-logUserMessage($id_of_user, $message);
 
   
 // Load JSON configuration file to get bot mention details
@@ -50,6 +49,8 @@ if (stripos($message, '@' . $botMention) === false) {
     // Exit if the bot is not mentioned
     exit;
 }
+
+logUserMessage($id_of_user, $message);
 
 // 4. Send a reply to the chat
 // Extract the chat room token from the webhook data
