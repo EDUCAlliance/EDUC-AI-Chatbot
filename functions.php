@@ -42,6 +42,18 @@ function getLLMResponse($userMessage, $apiKey, $endpoint, $configFilePath) {
         return "Error loading LLM config file.";
     }
     
+    // Check if courses file is specified and load it
+    if (isset($config['courses']) && !empty($config['courses'])) {
+        $coursesFilePath = $config['courses'];
+        $coursesContent = file_get_contents($coursesFilePath);
+        if ($coursesContent !== false) {
+            // Append the courses content to the system prompt
+            $config['systemPrompt'] .= " " . $coursesContent;
+        } else {
+            error_log("Error loading courses file: " . $coursesFilePath);
+        }
+    }
+
     // Construct the payload for the API request
     $payload = [
         "model" => $config['model'],
@@ -183,6 +195,18 @@ function getLLMResponseWithUserHistory($userMessage, $apiKey, $endpoint, $config
     $config = json_decode($configContent, true);
     if ($config === null) {
         return "Error loading LLM config file.";
+    }
+    
+    // Check if courses file is specified and load it
+    if (isset($config['courses']) && !empty($config['courses'])) {
+        $coursesFilePath = $config['courses'];
+        $coursesContent = file_get_contents($coursesFilePath);
+        if ($coursesContent !== false) {
+            // Append the courses content to the system prompt
+            $config['systemPrompt'] .= " " . $coursesContent;
+        } else {
+            error_log("Error loading courses file: " . $coursesFilePath);
+        }
     }
     
     // Inject the user's name and message history into the system prompt.
