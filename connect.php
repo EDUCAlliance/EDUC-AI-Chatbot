@@ -32,6 +32,8 @@ if (!hash_equals($generatedDigest, strtolower($signature))) {
 $message = $data['object']['content'];
 $name_of_user = $data['actor']['name'];
 $id_of_user = $data['actor']['id'];
+logUserMessage($id_of_user, $message);
+$history = getUserMessageHistory($id_of_user);
 
 // Load JSON configuration file to get bot mention details
 $configContent = file_get_contents(getenv('AI_CONFIG_FILE'));
@@ -57,7 +59,7 @@ $token = $data['target']['id'];
 $apiUrl = 'https://' . getenv('NC_URL') . '/ocs/v2.php/apps/spreed/api/v1/bot/' . $token . '/message';
 
 // Get the LLM response
-$llmResponse = getLLMResponse($message, getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT'), getenv('AI_CONFIG_FILE'));
+$llmResponse = getLLMResponse($message, getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT'), getenv('AI_CONFIG_FILE')). '/n - History:'. $history;
 
 // Prepare the request body with the combined response, a unique reference ID, and the ID of the original message
 $requestBody = [
