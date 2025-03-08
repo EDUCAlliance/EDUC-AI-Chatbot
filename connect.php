@@ -2,7 +2,11 @@
 require_once 'functions.php';
 
 // Load environment variables
-loadEnv('/app/code/.env');
+try {
+    loadEnv('.env');
+} catch (Exception $e) {
+    loadEnv('/app/code/.env');
+}
 
 // Shared secret for secure bot communication
 $secret = getenv('BOT_TOKEN');
