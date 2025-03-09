@@ -84,22 +84,83 @@ function getLLMResponse($userMessage, $apiKey, $endpoint, $configFilePath) {
         "Authorization: Bearer " . $apiKey,
         "Content-Type: application/json"
     ]);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
     
+    // Log the endpoint being used
+    error_log("DEBUG - Using API endpoint: " . $endpoint);
+    error_log("DEBUG - Using model: " . $payload['model']);
+    
+    // Encode payload and create a debug version for logging
+    $payloadJson = json_encode($payload);
+    error_log("DEBUG - API Payload: " . $payloadJson);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
+    
+    // Execute the request and capture any errors
     $response = curl_exec($ch);
+    $curlError = curl_error($ch);
+    $curlInfo = curl_getinfo($ch);
+    
+    error_log("DEBUG - cURL Info: " . json_encode($curlInfo));
+    
     if ($response === false) {
-        $error = curl_error($ch);
+        error_log("DEBUG - cURL Error: " . $curlError);
         curl_close($ch);
-        return "cURL Error: " . $error;
+        return "Error executing API request: " . $curlError;
     }
+    
     curl_close($ch);
     
-    // Parse the JSON response
+    // Log the raw response for debugging
+    error_log("DEBUG - API Raw Response: " . $response);
+    
+    // Process the API response.
     $result = json_decode($response, true);
+    error_log("DEBUG - API Decoded Response: " . json_encode($result));
+    
     if (isset($result['choices'][0]['message']['content'])) {
         return $result['choices'][0]['message']['content'];
     } else {
-        return "Error in API response.";
+        // Create a detailed error message
+        $errorDetails = [
+            'Raw Response' => substr($response, 0, 1000), // Limit length to prevent huge logs
+            'Decoded Response' => $result,
+            'Payload' => $payload,
+            'HTTP Status' => $curlInfo['http_code']
+        ];
+        
+        error_log("DEBUG - API Error Details: " . json_encode($errorDetails));
+        
+        // Get the encoded payload to display
+        $payloadExcerpt = substr(json_encode($payload), 0, 300);
+        
+        // Check for specific error types
+        $errorMessage = "Error in API response. Details logged to server error log.";
+        
+        // Check if there's an error message in the response
+        if (isset($result['error'])) {
+            $errorMessage .= "\n\nAPI Error: " . $result['error']['message'] ?? 'Unknown error';
+            
+            // Check for model-related errors
+            if (isset($result['error']['code']) && $result['error']['code'] === 'model_not_found') {
+                $errorMessage .= "\n\nThe specified model 'meta-llama-3.1-8b-rag' may not be available at this endpoint.";
+            }
+            
+            // Check for authentication errors
+            if (isset($result['error']['type']) && $result['error']['type'] === 'invalid_request_error') {
+                $errorMessage .= "\n\nThere may be an issue with the Arcana configuration or API key.";
+            }
+        }
+        
+        // Add generic troubleshooting tips for Arcana integration
+        if (isset($payload['arcana'])) {
+            $errorMessage .= "\n\nArcana RAG Integration Troubleshooting:";
+            $errorMessage .= "\n- Verify the Arcana ID and key are correct";
+            $errorMessage .= "\n- Confirm the API endpoint supports the Arcana integration";
+            $errorMessage .= "\n- Check if the model supports RAG functionality";
+        }
+        
+        return $errorMessage . "\n\nStatus code: " . 
+               $curlInfo['http_code'] . "\n\nResponse: " . substr($response, 0, 300) . 
+               "\n\nPayload (excerpt): " . $payloadExcerpt;
     }
 }
 
@@ -235,18 +296,31 @@ function getLLMResponseWithUserHistory($userMessage, $apiKey, $endpoint, $config
                 ["role" => "user", "content" => $userMessage]
             ]
         ),
-        "temperature" => 0.1
+        "temperature" => 0.7,
+        "max_tokens" => 800
     ];
 
     // Add Arcana RAG parameters if configured
     if (isset($config['arcana']) && !empty($config['arcana']['id']) && !empty($config['arcana']['key'])) {
-        $payload['extra_body'] = [
-            "arcana" => [
+        // Check if endpoint is compatible with Arcana
+        if (strpos($endpoint, 'chat-ai.academiccloud.de') !== false || 
+            strpos($endpoint, 'chat.gwdg.de') !== false ||
+            strpos($endpoint, 'api.academiccloud.de') !== false) {
+            // For GWDG Arcana endpoints, add Arcana parameters directly to the top level
+            $payload["arcana"] = [
                 "id" => $config['arcana']['id'],
                 "key" => $config['arcana']['key']
-            ]
-        ];
-        error_log("Added Arcana RAG parameters to API request");
+            ];
+            error_log("Added Arcana RAG parameters for GWDG endpoint");
+        } else {
+            // For other endpoints like OpenAI, add as extra_body parameter
+            // This assumes we're using an intermediate proxy or extended OpenAI-compatible API
+            $payload["arcana"] = [
+                "id" => $config['arcana']['id'],
+                "key" => $config['arcana']['key']
+            ];
+            error_log("Added Arcana RAG parameters in standard format - caution: endpoint may not support Arcana");
+        }
     }
 
     
@@ -260,22 +334,83 @@ function getLLMResponseWithUserHistory($userMessage, $apiKey, $endpoint, $config
         "Authorization: Bearer " . $apiKey,
         "Content-Type: application/json"
     ]);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
     
+    // Log the endpoint being used
+    error_log("DEBUG - Using API endpoint: " . $endpoint);
+    error_log("DEBUG - Using model: " . $payload['model']);
+    
+    // Encode payload and create a debug version for logging
+    $payloadJson = json_encode($payload);
+    error_log("DEBUG - API Payload: " . $payloadJson);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $payloadJson);
+    
+    // Execute the request and capture any errors
     $response = curl_exec($ch);
+    $curlError = curl_error($ch);
+    $curlInfo = curl_getinfo($ch);
+    
+    error_log("DEBUG - cURL Info: " . json_encode($curlInfo));
+    
     if ($response === false) {
-        $error = curl_error($ch);
+        error_log("DEBUG - cURL Error: " . $curlError);
         curl_close($ch);
-        return "cURL Error: " . $error;
+        return "Error executing API request: " . $curlError;
     }
+    
     curl_close($ch);
+    
+    // Log the raw response for debugging
+    error_log("DEBUG - API Raw Response: " . $response);
     
     // Process the API response.
     $result = json_decode($response, true);
+    error_log("DEBUG - API Decoded Response: " . json_encode($result));
+    
     if (isset($result['choices'][0]['message']['content'])) {
         return $result['choices'][0]['message']['content'];
     } else {
-        return "Error in API response - Error-Result:/n". $payload;
+        // Create a detailed error message
+        $errorDetails = [
+            'Raw Response' => substr($response, 0, 1000), // Limit length to prevent huge logs
+            'Decoded Response' => $result,
+            'Payload' => $payload,
+            'HTTP Status' => $curlInfo['http_code']
+        ];
+        
+        error_log("DEBUG - API Error Details: " . json_encode($errorDetails));
+        
+        // Get the encoded payload to display
+        $payloadExcerpt = substr(json_encode($payload), 0, 300);
+        
+        // Check for specific error types
+        $errorMessage = "Error in API response. Details logged to server error log.";
+        
+        // Check if there's an error message in the response
+        if (isset($result['error'])) {
+            $errorMessage .= "\n\nAPI Error: " . $result['error']['message'] ?? 'Unknown error';
+            
+            // Check for model-related errors
+            if (isset($result['error']['code']) && $result['error']['code'] === 'model_not_found') {
+                $errorMessage .= "\n\nThe specified model 'meta-llama-3.1-8b-rag' may not be available at this endpoint.";
+            }
+            
+            // Check for authentication errors
+            if (isset($result['error']['type']) && $result['error']['type'] === 'invalid_request_error') {
+                $errorMessage .= "\n\nThere may be an issue with the Arcana configuration or API key.";
+            }
+        }
+        
+        // Add generic troubleshooting tips for Arcana integration
+        if (isset($payload['arcana'])) {
+            $errorMessage .= "\n\nArcana RAG Integration Troubleshooting:";
+            $errorMessage .= "\n- Verify the Arcana ID and key are correct";
+            $errorMessage .= "\n- Confirm the API endpoint supports the Arcana integration";
+            $errorMessage .= "\n- Check if the model supports RAG functionality";
+        }
+        
+        return $errorMessage . "\n\nStatus code: " . 
+               $curlInfo['http_code'] . "\n\nResponse: " . substr($response, 0, 300) . 
+               "\n\nPayload (excerpt): " . $payloadExcerpt;
     }
 }
 
