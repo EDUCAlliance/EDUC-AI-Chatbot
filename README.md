@@ -93,7 +93,6 @@ DB_PATH=database/chatbot.sqlite                            # Path to SQLite data
 USE_RAG=true                                               # Enable/disable RAG
 RAG_TOP_K=5                                                # Number of documents to retrieve
 EMBEDDING_MODEL=e5-mistral-7b-instruct                     # Model for embeddings
-EMBEDDING_API_ENDPOINT=https://embedding-api.example.com   # Optional separate embedding API
 DEBUG=false                                                # Enable debug mode
 ```
 
