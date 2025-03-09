@@ -49,6 +49,9 @@ class LLMClient {
             $pathSuffix = '/embeddings';
         }
         
+        // Log the endpoint being used for debugging
+        error_log("DEBUG - Embedding API Endpoint: " . $endpoint . $pathSuffix);
+        
         $response = $this->makeApiRequest($payload, $pathSuffix, $endpoint);
         
         if (isset($response['data'][0]['embedding'])) {
@@ -59,9 +62,23 @@ class LLMClient {
             ];
         }
         
+        // Enhanced error reporting
+        $errorDetails = '';
+        if (isset($response['error'])) {
+            $errorDetails = is_array($response['error']) 
+                ? json_encode($response['error']) 
+                : $response['error'];
+        } elseif (isset($response['raw_response'])) {
+            $errorDetails = "Raw response: " . $response['raw_response'];
+        }
+        
+        error_log("DEBUG - Embedding generation failed: " . $errorDetails);
+        
         return [
             'success' => false,
-            'error' => $response['error'] ?? 'Unknown error generating embedding'
+            'error' => $response['error'] ?? 'Unknown error generating embedding',
+            'details' => $errorDetails,
+            'endpoint' => $endpoint . $pathSuffix
         ];
     }
     
@@ -115,12 +132,14 @@ class LLMClient {
             curl_close($ch);
             
             // Log the raw response for debugging
-            error_log("DEBUG - API Raw Response: " . $response);
+            error_log("DEBUG - API Raw Response: " . substr($response, 0, 1000));
             
             // Process the API response
             $result = json_decode($response, true);
             
             if ($result === null) {
+                error_log("DEBUG - JSON decode error: " . json_last_error_msg());
+                
                 if ($retries < $this->maxRetries) {
                     $retries++;
                     $this->sleep($backoffMs);
@@ -130,7 +149,7 @@ class LLMClient {
                 }
                 
                 return [
-                    'error' => 'Invalid JSON response from API',
+                    'error' => 'Invalid JSON response from API: ' . json_last_error_msg(),
                     'raw_response' => substr($response, 0, 1000),
                     'status' => $httpCode
                 ];

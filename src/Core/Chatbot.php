@@ -43,11 +43,22 @@ class Chatbot {
         $retrievalInfo = null;
         $retrievalResult = null;
         if ($this->retriever != null) {
+            error_log("DEBUG - Starting RAG retrieval for message: " . substr($message, 0, 100));
             $retrievalResult = $this->retriever->retrieveRelevantContent($message);
+            
+            if (!$retrievalResult['success']) {
+                error_log("DEBUG - RAG retrieval failed: " . json_encode($retrievalResult));
+            } else {
+                error_log("DEBUG - RAG retrieval successful with " . 
+                    (isset($retrievalResult['matches']) ? count($retrievalResult['matches']) : 0) . " matches");
+            }
             
             if ($retrievalResult['success'] && !empty($retrievalResult['matches'])) {
                 $injectedSystemPrompt = $this->retriever->augmentPrompt($injectedSystemPrompt, $message, $retrievalResult);
                 $retrievalInfo = $retrievalResult;
+                error_log("DEBUG - System prompt augmented with RAG content");
+            } else {
+                error_log("DEBUG - No RAG augmentation applied to system prompt");
             }
         }
         
@@ -78,7 +89,15 @@ class Chatbot {
                 $responseText .= $this->formatRetrievalDebugInfo($retrievalInfo);
             }
             
-            return $responseText."\nDEBUG: ".json_encode($retrievalResult);
+            // Add detailed debug information about the retrieval process
+            if ($this->debug) {
+                $debugInfo = "\n\nDEBUG INFO:";
+                $debugInfo .= "\nRetrieval Result: " . json_encode($retrievalResult, JSON_PRETTY_PRINT);
+                $debugInfo .= "\nSystem Prompt Length: " . strlen($injectedSystemPrompt) . " characters";
+                return $responseText . $debugInfo;
+            }
+            
+            return $responseText;
         }
         
         // Handle error

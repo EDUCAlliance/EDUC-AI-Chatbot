@@ -21,21 +21,39 @@ class Retriever {
     
     public function retrieveRelevantContent(string $query): array {
         // Generate embedding for the query
+        error_log("DEBUG - Generating embedding for query: " . substr($query, 0, 100));
         $queryEmbeddingResult = $this->llmClient->generateEmbedding($query);
         
         if (!$queryEmbeddingResult['success']) {
-            error_log("Error generating embedding for query: " . ($queryEmbeddingResult['error'] ?? 'Unknown error'));
+            $errorMsg = "Error generating embedding for query: " . 
+                ($queryEmbeddingResult['error'] ?? 'Unknown error');
+            
+            if (isset($queryEmbeddingResult['details'])) {
+                $errorMsg .= " - Details: " . $queryEmbeddingResult['details'];
+            }
+            
+            if (isset($queryEmbeddingResult['endpoint'])) {
+                $errorMsg .= " - Endpoint: " . $queryEmbeddingResult['endpoint'];
+            }
+            
+            error_log($errorMsg);
+            
             return [
                 'success' => false,
-                'error' => $queryEmbeddingResult['error'] ?? 'Unknown error generating query embedding'
+                'error' => $queryEmbeddingResult['error'] ?? 'Unknown error generating query embedding',
+                'details' => $queryEmbeddingResult['details'] ?? null,
+                'endpoint' => $queryEmbeddingResult['endpoint'] ?? null
             ];
         }
         
         // Search for similar embeddings
+        error_log("DEBUG - Searching for similar embeddings");
         $similarEmbeddings = $this->embeddingRepository->searchSimilarEmbeddings(
             $queryEmbeddingResult['embedding'],
             $this->topK
         );
+        
+        error_log("DEBUG - Found " . count($similarEmbeddings) . " similar embeddings");
         
         if (empty($similarEmbeddings)) {
             return [
