@@ -59,7 +59,21 @@ class DataProcessor {
             
             echo "\n[" . ($fileIndex + 1) . "/$totalFiles] Processing $filename...\n";
             
+            // Get file size and warn if it's large
+            $fileSize = filesize($filePath);
+            $fileSizeMB = round($fileSize / (1024 * 1024), 2);
+            
+            if ($fileSizeMB > 1) {
+                echo "  Large file detected: $fileSizeMB MB. This may take some time...\n";
+                
+                // For very large files, give a more specific warning
+                if ($fileSizeMB > 10) {
+                    echo "  Warning: Very large file ($fileSizeMB MB). Consider breaking it into smaller files if processing fails.\n";
+                }
+            }
+            
             try {
+                // Process the file based on its extension
                 switch (strtolower($extension)) {
                     case 'json':
                         $results[$filePath] = $this->processJsonFile($filePath);
@@ -80,6 +94,14 @@ class DataProcessor {
                         ];
                         echo "  Skipping unsupported file type: $extension\n";
                 }
+                
+                // Pause briefly between files to allow system to recover resources
+                if ($fileSizeMB > 5) {
+                    echo "  Pausing briefly to free system resources...\n";
+                    gc_collect_cycles(); // Force garbage collection
+                    sleep(1); // Pause for 1 second
+                }
+                
             } catch (\Exception $e) {
                 $results[$filePath] = [
                     'success' => false,
