@@ -623,10 +623,7 @@ class DocumentProcessor {
         
         // Handle whitespace more efficiently - no regex for large strings
         // Replace consecutive spaces with a single space
-        $text = str_replace("\r\n", " ", $text);
-        $text = str_replace("\n", " ", $text);
-        $text = str_replace("\r", " ", $text);
-        $text = str_replace("\t", " ", $text);
+        $text = str_replace(["\r\n", "\n", "\r", "\t"], " ", $text);
         
         // Remove consecutive spaces more efficiently without regex
         while (strpos($text, "  ") !== false) {
@@ -637,7 +634,11 @@ class DocumentProcessor {
         $textLength = strlen($text);
         $chunkStart = 0;
         
-        while ($chunkStart < $textLength) {
+        // Set a reasonable chunk limit to prevent memory issues
+        $maxChunks = 1000; // Reasonable limit to prevent infinite loops
+        $chunkCount = 0;
+        
+        while ($chunkStart < $textLength && $chunkCount < $maxChunks) {
             // Check if we have enough memory left
             $memoryUsed = memory_get_usage(true);
             $memoryLimit = $this->getMemoryLimitBytes();
@@ -650,7 +651,8 @@ class DocumentProcessor {
                 break;
             }
             
-            $chunkEnd = $chunkStart + min($this->chunkSize, 200); // Limit max chunk size to 200
+            // Use a reasonable max chunk size (smaller than before)
+            $chunkEnd = $chunkStart + min($this->chunkSize, 200);
             
             // Adjust chunk end to avoid splitting in the middle of a word
             if ($chunkEnd < $textLength) {
@@ -664,8 +666,8 @@ class DocumentProcessor {
             }
             
             // Add the chunk
-            $chunk = substr($text, $chunkStart, $chunkEnd - $chunkStart);
-            $chunks[] = $chunk;
+            $chunks[] = substr($text, $chunkStart, $chunkEnd - $chunkStart);
+            $chunkCount++;
             
             // Move the start position for the next chunk, accounting for overlap
             $chunkStart = $chunkEnd - min($this->chunkOverlap, 20); // Limit overlap to 20
@@ -675,8 +677,10 @@ class DocumentProcessor {
                 $chunkStart = $chunkEnd;
             }
             
-            // Free memory
-            unset($chunk);
+            // Force garbage collection every 50 chunks
+            if ($chunkCount % 50 === 0) {
+                gc_collect_cycles();
+            }
         }
         
         return $chunks;
@@ -813,13 +817,20 @@ class DocumentProcessor {
         $textLength = strlen($text);
         
         // If text is extremely large, process it in segments
-        if ($textLength > 500000) { // 500KB threshold
-            // Process text in 250KB segments with overlap
-            $segmentSize = 250000;
-            $segmentOverlap = 5000;
+        if ($textLength > 100000) { // Lower threshold to 100KB
+            // Process text in smaller segments with overlap
+            $segmentSize = 100000; // Smaller segments
+            $segmentOverlap = 1000; // Smaller overlap
             $segmentStart = 0;
             
             while ($segmentStart < $textLength) {
+                // Check if we're approaching memory limit
+                if ($this->isMemoryApproachingLimit(20)) { // 20MB buffer
+                    error_log("Memory limit approaching during chunking, stopping at " . 
+                             round($segmentStart / $textLength * 100, 1) . "% complete");
+                    break;
+                }
+                
                 $segmentEnd = min($segmentStart + $segmentSize, $textLength);
                 
                 // Get this segment
@@ -838,11 +849,29 @@ class DocumentProcessor {
                 gc_collect_cycles();
             }
         } else {
-            // For smaller texts, use the original method
+            // For smaller texts, use the segment method directly
             $chunks = $this->splitSegmentIntoChunks($text);
         }
         
         return $chunks;
+    }
+    
+    /**
+     * Check if memory usage is approaching the limit
+     * 
+     * @param int $bufferMB Buffer in MB to keep free
+     * @return bool True if memory usage is approaching the limit
+     */
+    private function isMemoryApproachingLimit(int $bufferMB = 50): bool {
+        $memoryUsed = memory_get_usage(true);
+        $memoryLimit = $this->getMemoryLimitBytes();
+        
+        if ($memoryLimit <= 0) { // No limit
+            return false;
+        }
+        
+        $bufferBytes = $bufferMB * 1024 * 1024;
+        return ($memoryLimit - $memoryUsed) < $bufferBytes;
     }
     
     private function jsonItemToText(array $item): string {
@@ -859,5 +888,127 @@ class DocumentProcessor {
         }
         
         return $text;
+    }
+    
+    /**
+     * Process a text document directly
+     * 
+     * @param string $filePath Path to the text file
+     * @param string $documentType Type of document (txt, md, etc)
+     * @return array Results of processing
+     * @throws \Exception
+     */
+    public function processTextDocument(string $filePath, string $documentType = 'text'): array {
+        // Check if file exists
+        if (!file_exists($filePath)) {
+            throw new \Exception("Text file not found: $filePath");
+        }
+        
+        // Set higher memory limit for this operation but less than for JSON
+        $originalMemoryLimit = ini_get('memory_limit');
+        ini_set('memory_limit', '1G');
+        
+        $results = [];
+        error_log("Processing $documentType document: $filePath");
+        
+        try {
+            // Get the file size
+            $fileSize = filesize($filePath);
+            $fileSizeMB = round($fileSize / (1024 * 1024), 2);
+            error_log("File size: $fileSizeMB MB");
+            
+            // For larger files, use a streaming approach to avoid memory issues
+            if ($fileSizeMB > 5) {
+                error_log("Large file detected, using streaming approach");
+                return $this->processLargeTextFile($filePath, $documentType);
+            }
+            
+            // For smaller files, read the whole content
+            $content = file_get_contents($filePath);
+            if ($content === false) {
+                throw new \Exception("Could not read file: $filePath");
+            }
+            
+            // Process the document
+            $documentId = basename($filePath);
+            $results[] = $this->processDocument($documentId, $documentType, $content);
+            
+            // Clean up
+            gc_collect_cycles();
+            
+            return $results;
+        } catch (\Exception $e) {
+            error_log("Error processing text document: " . $e->getMessage());
+            throw $e;
+        } finally {
+            // Restore original memory limit
+            ini_set('memory_limit', $originalMemoryLimit);
+        }
+    }
+    
+    /**
+     * Process a large text file in chunks to avoid memory issues
+     * 
+     * @param string $filePath Path to the large text file
+     * @param string $documentType Type of document
+     * @return array Results of processing
+     */
+    private function processLargeTextFile(string $filePath, string $documentType): array {
+        $results = [];
+        $documentId = basename($filePath);
+        $chunkIndex = 0;
+        $batchSize = 64 * 1024; // Read 64KB at a time
+        
+        $handle = fopen($filePath, 'r');
+        if ($handle === false) {
+            throw new \Exception("Could not open file: $filePath");
+        }
+        
+        try {
+            $buffer = '';
+            $totalBytes = 0;
+            
+            // Process the file in manageable chunks
+            while (!feof($handle)) {
+                $chunk = fread($handle, $batchSize);
+                $buffer .= $chunk;
+                $totalBytes += strlen($chunk);
+                
+                // When buffer exceeds chunk size, process it
+                if (strlen($buffer) >= $this->chunkSize * 2) {
+                    // Find a good break point (end of paragraph or sentence)
+                    $breakPoint = strrpos(substr($buffer, 0, $this->chunkSize * 1.5), "\n\n");
+                    if ($breakPoint === false) {
+                        $breakPoint = strrpos(substr($buffer, 0, $this->chunkSize * 1.5), ". ");
+                    }
+                    if ($breakPoint === false) {
+                        $breakPoint = $this->chunkSize;
+                    }
+                    
+                    // Extract content to process
+                    $content = substr($buffer, 0, $breakPoint);
+                    $buffer = substr($buffer, $breakPoint);
+                    
+                    // Process this segment
+                    $segmentId = $documentId . '_' . $chunkIndex;
+                    $results[] = $this->processDocument($segmentId, $documentType, $content);
+                    
+                    $chunkIndex++;
+                }
+                
+                // Free up memory
+                gc_collect_cycles();
+            }
+            
+            // Process remaining buffer
+            if (!empty($buffer)) {
+                $segmentId = $documentId . '_' . $chunkIndex;
+                $results[] = $this->processDocument($segmentId, $documentType, $buffer);
+            }
+            
+            return $results;
+        } finally {
+            fclose($handle);
+        }
     }
 } 

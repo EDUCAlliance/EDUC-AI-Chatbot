@@ -54,7 +54,7 @@ class DataProcessor {
         echo "Found $totalFiles files to process\n";
         
         foreach ($files as $fileIndex => $filePath) {
-            $extension = pathinfo($filePath, PATHINFO_EXTENSION);
+            $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
             $filename = basename($filePath);
             
             echo "\n[" . ($fileIndex + 1) . "/$totalFiles] Processing $filename...\n";
@@ -73,32 +73,45 @@ class DataProcessor {
             }
             
             try {
+                // Check if file is actually a text file despite its extension
+                if ($extension === 'json') {
+                    // Try to validate it's actually JSON
+                    $isJson = $this->isValidJson($filePath);
+                    if (!$isJson) {
+                        echo "  File appears to be incorrectly labeled as JSON. Processing as text instead.\n";
+                        $results[$filePath] = $this->processTextFile($filePath);
+                        continue;
+                    }
+                }
+                
                 // Process the file based on its extension
-                switch (strtolower($extension)) {
+                switch ($extension) {
                     case 'json':
                         $results[$filePath] = $this->processJsonFile($filePath);
                         break;
                     case 'txt':
+                    case 'text':
                         $results[$filePath] = $this->processTextFile($filePath);
                         break;
                     case 'md':
+                    case 'markdown':
                         $results[$filePath] = $this->processMarkdownFile($filePath);
                         break;
                     case 'csv':
                         $results[$filePath] = $this->processCsvFile($filePath);
                         break;
                     default:
-                        $results[$filePath] = [
-                            'success' => false,
-                            'error' => "Unsupported file type: $extension"
-                        ];
-                        echo "  Skipping unsupported file type: $extension\n";
+                        // Try to process as text for unknown extensions
+                        echo "  Unrecognized file type: $extension. Attempting to process as text...\n";
+                        $results[$filePath] = $this->processTextFile($filePath);
                 }
+                
+                // Force garbage collection between files to free memory
+                gc_collect_cycles();
                 
                 // Pause briefly between files to allow system to recover resources
                 if ($fileSizeMB > 5) {
                     echo "  Pausing briefly to free system resources...\n";
-                    gc_collect_cycles(); // Force garbage collection
                     sleep(1); // Pause for 1 second
                 }
                 
@@ -122,23 +135,31 @@ class DataProcessor {
     }
     
     public function processTextFile(string $filePath): array {
-        $content = file_get_contents($filePath);
-        if ($content === false) {
-            throw new \Exception("Could not read text file: $filePath");
+        try {
+            return [
+                'success' => true,
+                'results' => $this->documentProcessor->processTextDocument($filePath, 'text')
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
         }
-        
-        $documentId = basename($filePath);
-        $result = $this->documentProcessor->processDocument($documentId, 'text', $content);
-        
-        return [
-            'success' => true,
-            'results' => [$result]
-        ];
     }
     
     public function processMarkdownFile(string $filePath): array {
-        // Process markdown files as text for now
-        return $this->processTextFile($filePath);
+        try {
+            return [
+                'success' => true,
+                'results' => $this->documentProcessor->processTextDocument($filePath, 'markdown')
+            ];
+        } catch (\Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
     }
     
     public function processCsvFile(string $filePath): array {
@@ -191,5 +212,35 @@ class DataProcessor {
         }
         
         return $text;
+    }
+    
+    /**
+     * Check if a file contains valid JSON
+     *
+     * @param string $filePath Path to the file to check
+     * @return bool True if the file contains valid JSON
+     */
+    private function isValidJson(string $filePath): bool {
+        // For large files, just check the first few KB
+        $handle = fopen($filePath, 'r');
+        if ($handle === false) {
+            return false;
+        }
+        
+        // Read first 8KB to check structure
+        $sample = fread($handle, 8192);
+        fclose($handle);
+        
+        // Trim whitespace
+        $sample = trim($sample);
+        
+        // Check if it starts with a JSON character
+        if (empty($sample) || ($sample[0] !== '{' && $sample[0] !== '[')) {
+            return false;
+        }
+        
+        // Try to decode a small sample
+        json_decode($sample);
+        return json_last_error() === JSON_ERROR_NONE;
     }
 } 

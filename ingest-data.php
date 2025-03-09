@@ -16,8 +16,11 @@
  *   --help            Display this help message
  */
 
-// Set memory limit for processing large files
-ini_set('memory_limit', '2G');
+// Set memory limit for processing large files - more conservative limit
+ini_set('memory_limit', '1G');
+
+// Enable better garbage collection
+gc_enable();
 
 // Direct includes instead of using Composer autoloader
 require_once __DIR__ . '/src/Core/Environment.php';
