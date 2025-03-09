@@ -60,8 +60,11 @@ class Retriever {
         ];
     }
     
-    public function augmentPrompt(string $systemPrompt, string $query, array $options = []): string {
-        $retrievalResult = $this->retrieveRelevantContent($query);
+    public function augmentPrompt(string $systemPrompt, string $query, array $retrievalResult = null, array $options = []): string {
+        // Use the provided retrievalResult if available, otherwise retrieve content
+        if ($retrievalResult === null) {
+            $retrievalResult = $this->retrieveRelevantContent($query);
+        }
         
         if (!$retrievalResult['success'] || empty($retrievalResult['matches'])) {
             return $systemPrompt;

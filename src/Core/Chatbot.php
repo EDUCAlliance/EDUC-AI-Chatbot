@@ -40,12 +40,13 @@ class Chatbot {
         $injectedSystemPrompt = $this->injectUserInfoIntoSystemPrompt($systemPrompt, $userName, $userId);
         
         // Apply RAG if available
-        //$retrievalInfo = null;
-        if ($this->retriever == null) {
+        $retrievalInfo = null;
+        $retrievalResult = null;
+        if ($this->retriever != null) {
             $retrievalResult = $this->retriever->retrieveRelevantContent($message);
             
             if ($retrievalResult['success'] && !empty($retrievalResult['matches'])) {
-                $injectedSystemPrompt = $this->retriever->augmentPrompt($injectedSystemPrompt, $message);
+                $injectedSystemPrompt = $this->retriever->augmentPrompt($injectedSystemPrompt, $message, $retrievalResult);
                 $retrievalInfo = $retrievalResult;
             }
         }
@@ -77,7 +78,7 @@ class Chatbot {
                 $responseText .= $this->formatRetrievalDebugInfo($retrievalInfo);
             }
             
-            return $responseText."\nDEBUG: ".json_encode($retrievalResult);
+            return $responseText."\nDEBUG: ".json_encode($injectedSystemPrompt);
         }
         
         // Handle error
