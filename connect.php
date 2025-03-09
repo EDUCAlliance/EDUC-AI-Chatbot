@@ -1,15 +1,29 @@
 <?php
-require_once 'functions.php';
+require_once 'vendor/autoload.php';
+
+use EDUC\Core\Environment;
+use EDUC\Core\Config;
+use EDUC\Core\Chatbot;
+use EDUC\API\LLMClient;
+use EDUC\Database\Database;
+use EDUC\RAG\Retriever;
+use EDUC\RAG\DataProcessor;
+use EDUC\Database\EmbeddingRepository;
 
 // Load environment variables
 try {
-    loadEnv('.env');
-} catch (Exception $e) {
-    loadEnv('/app/code/.env');
+    Environment::load('.env');
+} catch (\Exception $e) {
+    try {
+        Environment::load('/app/code/.env');
+    } catch (\Exception $e) {
+        error_log("Error loading environment: " . $e->getMessage());
+        exit("Error loading environment. Check server logs for details.");
+    }
 }
 
 // Shared secret for secure bot communication
-$secret = getenv('BOT_TOKEN');
+$secret = Environment::get('BOT_TOKEN');
 
 // 1. Receive the webhook
 // Retrieve and decode the incoming JSON payload from the webhook
@@ -37,36 +51,69 @@ $message = $data['object']['content'];
 $name_of_user = $data['actor']['name'];
 $id_of_user = $data['actor']['id'];
 
-  
-// Load JSON configuration file to get bot mention details
-$configContent = file_get_contents(getenv('AI_CONFIG_FILE'));
-if ($configContent === false) {
-    exit("Error loading LLM config file.");
+// Initialize components
+try {
+    // Initialize the configuration
+    $config = Config::getInstance(Environment::get('AI_CONFIG_FILE'));
+    
+    // Initialize the database
+    $dbPath = Environment::get('DB_PATH', dirname(__FILE__) . '/database/chatbot.sqlite');
+    $db = Database::getInstance($dbPath);
+    
+    // Initialize the LLM client
+    $llmClient = new LLMClient(
+        Environment::get('AI_API_KEY'),
+        Environment::get('AI_API_ENDPOINT')
+    );
+    
+    // Check if we should use RAG
+    $useRag = strtolower(Environment::get('USE_RAG', 'true')) === 'true';
+    $debug = strtolower(Environment::get('DEBUG', 'false')) === 'true';
+    $retriever = null;
+    
+    if ($useRag) {
+        // Initialize embedding repository and retriever
+        $embeddingRepository = new EmbeddingRepository($db);
+        
+        // Get RAG configuration from environment or use defaults
+        $topK = (int)Environment::get('RAG_TOP_K', 5);
+        $embeddingModel = Environment::get('EMBEDDING_MODEL', 'e5-mistral-7b-instruct');
+        
+        // Create custom llm client for embeddings if a different endpoint is specified
+        $embeddingEndpoint = Environment::get('EMBEDDING_API_ENDPOINT', Environment::get('AI_API_ENDPOINT'));
+        $embeddingClient = $embeddingEndpoint !== Environment::get('AI_API_ENDPOINT') 
+            ? new LLMClient(Environment::get('AI_API_KEY'), $embeddingEndpoint)
+            : $llmClient;
+            
+        $retriever = new Retriever($embeddingClient, $embeddingRepository, $topK);
+    }
+    
+    // Initialize the chatbot with debug mode if enabled
+    $chatbot = new Chatbot($config, $llmClient, $db, $retriever, $debug);
+    
+    // Get the bot mention from config
+    $botMention = $config->get('botMention', '');
+    
+    // Check if the bot is mentioned
+    if (stripos($message, '@' . $botMention) === false) {
+        // Exit if the bot is not mentioned
+        exit;
+    }
+    
+    // Process the user message
+    $llmResponse = $chatbot->processUserMessage($message, $id_of_user, $name_of_user);
+    
+} catch (\Exception $e) {
+    error_log("Error initializing components: " . $e->getMessage());
+    $llmResponse = "Sorry, I encountered an error: " . $e->getMessage();
 }
-$config = json_decode($configContent, true);
-if ($config === null) {
-    exit("Error loading LLM config file.");
-}
-
-$botMention = $config['botMention'] ?? '';
-if (stripos($message, '@' . $botMention) === false) {
-    // Exit if the bot is not mentioned
-    exit;
-}
-
-logUserMessage($id_of_user, $message);
 
 // 4. Send a reply to the chat
 // Extract the chat room token from the webhook data
 $token = $data['target']['id'];
 
 // Define the API URL for sending a bot message to the chat room
-$apiUrl = 'https://' . getenv('NC_URL') . '/ocs/v2.php/apps/spreed/api/v1/bot/' . $token . '/message';
-
-// Get the LLM response
-//$llmResponse = getLLMResponse($message, getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT'), getenv('AI_CONFIG_FILE')). '/n - History:'. $newSystemPrompt;
-$llmResponse = getLLMResponseWithUserHistory($message, getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT'), getenv('AI_CONFIG_FILE'), $name_of_user, $id_of_user);
-
+$apiUrl = 'https://' . Environment::get('NC_URL') . '/ocs/v2.php/apps/spreed/api/v1/bot/' . $token . '/message';
 
 // Prepare the request body with the combined response, a unique reference ID, and the ID of the original message
 $requestBody = [

@@ -1,0 +1,21 @@
+{
+    "name": "educ/ai-talkbot",
+    "description": "An AI-powered chatbot with RAG capabilities for EDUC",
+    "type": "project",
+    "license": "proprietary",
+    "autoload": {
+        "psr-4": {
+            "EDUC\\": "src/"
+        }
+    },
+    "require": {
+        "php": ">=7.4",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "ext-pdo": "*",
+        "ext-pdo_sqlite": "*"
+    },
+    "scripts": {
+        "process-data": "php process_data.php --verbose"
+    }
+} 
