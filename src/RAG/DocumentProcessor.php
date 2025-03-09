@@ -26,11 +26,39 @@ class DocumentProcessor {
     }
     
     public function processDocument(string $documentId, string $documentType, string $content, array $metadata = []): array {
-        // Check if content exceeds maximum size
-        $maxContentSize = 100000; // 100KB limit for a single document
-        if (strlen($content) > $maxContentSize) {
-            error_log("Warning: Content for document $documentId is very large (" . strlen($content) . " bytes). Truncating...");
-            $content = substr($content, 0, $maxContentSize) . "\n[Content truncated due to size]";
+        // Safety check - limit content size to absolute maximum
+        $maxSafeContentSize = 50000; // 50KB absolute maximum
+        if (strlen($content) > $maxSafeContentSize) {
+            error_log("Warning: Content for document $documentId is very large (" . strlen($content) . " bytes). Truncating to $maxSafeContentSize bytes.");
+            $content = substr($content, 0, $maxSafeContentSize) . "\n[Content truncated due to size]";
+        }
+        
+        // Check memory usage before proceeding
+        $memoryUsed = memory_get_usage(true);
+        $memoryLimit = $this->getMemoryLimitBytes();
+        
+        // If we're within 500MB of the limit, stop processing
+        if ($memoryLimit > 0 && ($memoryLimit - $memoryUsed) < 500 * 1024 * 1024) {
+            error_log("Memory limit approaching in processDocument. Used: " . 
+                  round($memoryUsed / (1024 * 1024), 2) . "MB of " . 
+                  round($memoryLimit / (1024 * 1024), 2) . "MB");
+            // Return early with error status
+            return [
+                'document_id' => $documentId,
+                'error' => 'Insufficient memory to process document'
+            ];
+        }
+        
+        // Limit metadata size
+        if (count($metadata) > 10) {
+            error_log("Limiting metadata for document $documentId (had " . count($metadata) . " fields)");
+            // Keep only a few essential fields
+            $keysToKeep = array_slice(array_keys($metadata), 0, 10);
+            $newMetadata = [];
+            foreach ($keysToKeep as $key) {
+                $newMetadata[$key] = $metadata[$key];
+            }
+            $metadata = $newMetadata;
         }
         
         $chunks = $this->splitIntoChunks($content);
@@ -45,6 +73,18 @@ class DocumentProcessor {
         
         // Process chunks individually instead of in batches to save memory
         foreach ($chunks as $chunkIndex => $chunk) {
+            // Check memory before processing each chunk
+            $memoryUsed = memory_get_usage(true);
+            $memoryLimit = $this->getMemoryLimitBytes();
+            
+            // If we're within 200MB of the limit, stop processing
+            if ($memoryLimit > 0 && ($memoryLimit - $memoryUsed) < 200 * 1024 * 1024) {
+                error_log("Memory limit approaching in chunk processing. Stopping early. Used: " . 
+                      round($memoryUsed / (1024 * 1024), 2) . "MB of " . 
+                      round($memoryLimit / (1024 * 1024), 2) . "MB");
+                break;
+            }
+            
             error_log("Processing chunk $chunkIndex of " . count($chunks));
             
             // Generate embedding for the chunk
@@ -72,9 +112,10 @@ class DocumentProcessor {
             
             // Free memory
             unset($embeddingResult);
-            if ($chunkIndex % 5 === 0) {  // Every 5 chunks
-                gc_collect_cycles();  // Force garbage collection
-            }
+            unset($chunk);
+            
+            // Force garbage collection on every chunk to prevent memory buildup
+            gc_collect_cycles();
         }
         
         return [
@@ -104,10 +145,56 @@ class DocumentProcessor {
         return $results;
     }
     
+    /**
+     * Safely validate a JSON file to see if it's well-formed
+     * 
+     * @param string $filePath Path to JSON file
+     * @return bool True if file is valid JSON, false otherwise
+     */
+    private function validateJsonFile(string $filePath): bool {
+        try {
+            // Open file
+            $handle = fopen($filePath, 'r');
+            if ($handle === false) {
+                error_log("Could not open file for validation: $filePath");
+                return false;
+            }
+            
+            // Read just the first 1KB to check structure
+            $firstPart = fread($handle, 1024);
+            fclose($handle);
+            
+            // Check if it starts with [ or {
+            $firstChar = trim($firstPart)[0] ?? '';
+            if ($firstChar !== '[' && $firstChar !== '{') {
+                error_log("JSON file does not start with [ or {: $filePath");
+                return false;
+            }
+            
+            // Test with a tiny portion of the file
+            $json = json_decode($firstPart, true);
+            if (json_last_error() !== JSON_ERROR_NONE && 
+                json_last_error() !== JSON_ERROR_SYNTAX) { // Syntax error is expected for a partial file
+                error_log("JSON validation error: " . json_last_error_msg());
+                return false;
+            }
+            
+            return true;
+        } catch (\Exception $e) {
+            error_log("Error validating JSON file: " . $e->getMessage());
+            return false;
+        }
+    }
+    
     public function processJsonDocument(string $filePath, string $documentType = 'json'): array {
         // Check if file exists
         if (!file_exists($filePath)) {
             throw new \Exception("JSON file not found: $filePath");
+        }
+        
+        // First, perform a simple validation check
+        if (!$this->validateJsonFile($filePath)) {
+            throw new \Exception("File $filePath appears to be invalid JSON");
         }
         
         // Set higher memory limit for this operation
@@ -126,68 +213,159 @@ class DocumentProcessor {
             // For extremely small files, we can use a direct approach
             if ($fileSizeMB < 0.1) {
                 error_log("Small file detected, using direct approach");
-                $jsonContent = file_get_contents($filePath);
-                $data = json_decode($jsonContent, true);
                 
-                if ($data === null) {
-                    throw new \Exception("Invalid JSON file: $filePath");
+                // Even for small files, let's use a streaming approach to be safer
+                $handle = fopen($filePath, 'r');
+                if ($handle === false) {
+                    throw new \Exception("Could not open JSON file: $filePath");
                 }
                 
-                // If it's a single object, convert to array with one item
-                if (!is_array($data) || (is_array($data) && !isset($data[0]) && count($data) > 0)) {
-                    $data = [$data];
+                // Read the entire file content, but limit to 150KB just in case
+                $maxBytesToRead = 150 * 1024; // 150KB max
+                $jsonContent = '';
+                $bytesRead = 0;
+                
+                while (!feof($handle) && $bytesRead < $maxBytesToRead) {
+                    $chunk = fread($handle, 8192); // Read in 8KB chunks
+                    $bytesRead += strlen($chunk);
+                    $jsonContent .= $chunk;
                 }
                 
-                // Process each item
-                foreach ($data as $index => $item) {
-                    $documentId = basename($filePath) . '_' . $index;
+                fclose($handle);
+                
+                // If we hit the limit, warn and truncate
+                if ($bytesRead >= $maxBytesToRead) {
+                    error_log("Warning: File exceeded 150KB read limit. Data may be truncated.");
+                    $jsonContent = substr($jsonContent, 0, $maxBytesToRead);
+                    // Ensure we have valid JSON by appending a closing bracket if needed
+                    $jsonContent = rtrim($jsonContent) . ']';
+                }
+                
+                // Parse JSON with memory limit checks
+                $data = null;
+                
+                try {
+                    $data = json_decode($jsonContent, true, 10); // Limit depth to 10
                     
-                    // Super simplified content
-                    if (count($item) > 20) {
-                        $item = array_slice($item, 0, 20, true);
+                    // Check for decoding errors
+                    if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
+                        throw new \Exception("JSON parse error: " . json_last_error_msg());
                     }
                     
-                    $content = "Item " . ($index + 1) . ":\n";
-                    foreach ($item as $key => $value) {
-                        if (is_array($value) || is_object($value)) {
-                            $value = "[Complex value]";
-                        } else if (is_string($value) && strlen($value) > 100) {
-                            $value = substr($value, 0, 100) . "...";
+                    // Clear the raw content immediately to free memory
+                    unset($jsonContent);
+                    
+                    // Force garbage collection
+                    gc_collect_cycles();
+                    
+                    // If it's a single object, convert to array with one item
+                    if (!is_array($data)) {
+                        $data = [$data];
+                    } else if (is_array($data) && !isset($data[0]) && count($data) > 0) {
+                        // This is an object with keys, not an array of objects
+                        $data = [$data];
+                    }
+                    
+                    // Limit to maximum of 20 items to process
+                    if (count($data) > 20) {
+                        error_log("Limiting to first 20 items from data array");
+                        $data = array_slice($data, 0, 20);
+                    }
+                    
+                    // Process each item with extreme memory consciousness
+                    foreach ($data as $index => $item) {
+                        // Check memory usage before processing each item
+                        $memoryUsed = memory_get_usage(true);
+                        $memoryLimit = $this->getMemoryLimitBytes();
+                        
+                        // If we're within 400MB of the limit, stop processing
+                        if ($memoryLimit > 0 && ($memoryLimit - $memoryUsed) < 400 * 1024 * 1024) {
+                            error_log("Memory limit approaching, stopping item processing. Used: " . 
+                                  round($memoryUsed / (1024 * 1024), 2) . "MB of " . 
+                                  round($memoryLimit / (1024 * 1024), 2) . "MB");
+                            break;
                         }
-                        $content .= "- $key: $value\n";
+                        
+                        $documentId = basename($filePath) . '_' . $index;
+                        
+                        // Extremely simplified content - no more than 5 keys
+                        $content = "Item " . ($index + 1) . ":\n";
+                        $keyCount = 0;
+                        
+                        foreach ($item as $key => $value) {
+                            // Limit to 5 keys maximum
+                            if ($keyCount >= 5) {
+                                break;
+                            }
+                            
+                            // Skip null values
+                            if ($value === null) {
+                                continue;
+                            }
+                            
+                            // Very basic value conversion
+                            if (is_array($value) || is_object($value)) {
+                                $value = "[Complex value]";
+                            } else if (is_bool($value)) {
+                                $value = $value ? "true" : "false";
+                            } else if (is_string($value)) {
+                                if (strlen($value) > 50) {
+                                    $value = substr($value, 0, 50) . "...";
+                                }
+                            } else {
+                                $value = (string)$value;
+                            }
+                            
+                            $content .= "- $key: $value\n";
+                            $keyCount++;
+                        }
+                        
+                        try {
+                            // Process document with absolutely minimal metadata
+                            $result = $this->processDocument(
+                                $documentId,
+                                $documentType,
+                                $content,
+                                ['source' => basename($filePath)]
+                            );
+                            $results[] = $result;
+                        } catch (\Exception $e) {
+                            error_log("Error processing document $documentId: " . $e->getMessage());
+                        }
+                        
+                        // Aggressively clear memory
+                        unset($item);
+                        unset($content);
+                        
+                        // Force garbage collection on each item
+                        gc_collect_cycles();
                     }
                     
-                    try {
-                        // Process document with minimal metadata to save memory
-                        $result = $this->processDocument(
-                            $documentId,
-                            $documentType,
-                            $content,
-                            ['source' => $filePath, 'index' => $index]
-                        );
-                        $results[] = $result;
-                    } catch (\Exception $e) {
-                        error_log("Error processing document $documentId: " . $e->getMessage());
-                    }
+                    // Clear all data
+                    unset($data);
                     
-                    // Clear memory
-                    unset($item);
-                    unset($content);
+                    // Final garbage collection
+                    gc_collect_cycles();
+                    
+                    error_log("Finished direct processing with " . count($results) . " results");
+                    
+                    // Restore original memory limit
+                    ini_set('memory_limit', $originalMemoryLimit);
+                    
+                    return $results;
+                } catch (\Exception $e) {
+                    // Clear all variables to free memory
+                    unset($jsonContent);
+                    unset($data);
+                    
+                    // Force garbage collection
+                    gc_collect_cycles();
+                    
+                    error_log("Error in direct processing: " . $e->getMessage());
+                    
+                    // Fall through to the streaming approach
+                    error_log("Falling back to streaming approach after direct processing error");
                 }
-                
-                // Clear memory
-                unset($data);
-                unset($jsonContent);
-                
-                // Force garbage collection
-                gc_collect_cycles();
-                
-                error_log("Finished direct processing with " . count($results) . " results");
-                
-                // Restore original memory limit
-                ini_set('memory_limit', $originalMemoryLimit);
-                
-                return $results;
             }
             
             // For larger files, use the line-by-line streaming approach
