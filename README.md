@@ -22,7 +22,7 @@ More OCC Commands can you find here: https://nextcloud-talk.readthedocs.io/en/la
 
 ### Object-Oriented Architecture
 
-The project uses a modern object-oriented approach with the following key components:
+The project uses a object-oriented approach with the following key components:
 
 1. **Core Components**
    - `Environment`: Manages environment variables
