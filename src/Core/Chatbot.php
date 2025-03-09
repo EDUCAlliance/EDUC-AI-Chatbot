@@ -40,8 +40,8 @@ class Chatbot {
         $injectedSystemPrompt = $this->injectUserInfoIntoSystemPrompt($systemPrompt, $userName, $userId);
         
         // Apply RAG if available
-        $retrievalInfo = null;
-        if ($this->retriever !== null) {
+        //$retrievalInfo = null;
+        if ($this->retriever == null) {
             $retrievalResult = $this->retriever->retrieveRelevantContent($message);
             
             if ($retrievalResult['success'] && !empty($retrievalResult['matches'])) {
@@ -77,7 +77,7 @@ class Chatbot {
                 $responseText .= $this->formatRetrievalDebugInfo($retrievalInfo);
             }
             
-            return $responseText."\nDEBUG: ".json_encode($retrievalInfo);
+            return $responseText."\nDEBUG: ".json_encode($retrievalResult);
         }
         
         // Handle error
