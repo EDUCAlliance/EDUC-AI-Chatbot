@@ -275,7 +275,7 @@ function getLLMResponseWithUserHistory($userMessage, $apiKey, $endpoint, $config
     if (isset($result['choices'][0]['message']['content'])) {
         return $result['choices'][0]['message']['content'];
     } else {
-        return "Error in API response - test.";
+        return "Error in API response - Error-Result:". $result;
     }
 }
 
