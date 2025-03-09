@@ -305,17 +305,9 @@ function getLLMResponseWithUserHistory($userMessage, $apiKey, $endpoint, $config
             "arcana" => [
                 "id" => $config['arcana']['id'],
                 "key" => $config['arcana']['key']
-            ];
-            error_log("Added Arcana RAG parameters for GWDG endpoint");
-        } else {
-            // For other endpoints like OpenAI, add as extra_body parameter
-            // This assumes we're using an intermediate proxy or extended OpenAI-compatible API
-            $payload["arcana"] = [
-                "id" => $config['arcana']['id'],
-                "key" => $config['arcana']['key']
-            ];
-            error_log("Added Arcana RAG parameters in standard format - caution: endpoint may not support Arcana");
-        }
+            ]
+        ];
+        error_log("Added Arcana RAG parameters to API request");
     }
 
     
