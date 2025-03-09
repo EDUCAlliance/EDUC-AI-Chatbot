@@ -73,11 +73,11 @@ class Chatbot {
             $responseText = $response['choices'][0]['message']['content'];
             
             // Add debug information if requested
-           // if ($this->debug && $retrievalInfo !== null) {
+            if ($this->debug && $retrievalInfo !== null) {
                 $responseText .= $this->formatRetrievalDebugInfo($retrievalInfo);
-           // }
+            }
             
-            return $responseText."xx";
+            return $responseText. "Debug: " . json_encode($messages);
         }
         
         // Handle error
