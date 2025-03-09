@@ -302,7 +302,8 @@ function getLLMResponseWithUserHistory($userMessage, $apiKey, $endpoint, $config
                 "key" => $config['arcana']['key']
             ]
         ],
-        "temperature" => 0.1
+        "temperature" => 0,
+        "max_tokens" => 800
     ];
 
     // Add Arcana RAG parameters if configured
