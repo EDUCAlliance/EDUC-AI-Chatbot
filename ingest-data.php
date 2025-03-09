@@ -88,7 +88,7 @@ try {
     log_message("Using data directory: $dataDir", true);
     
     // Load config
-    $config = new Config($configFile);
+    $config = Config::getInstance($configFile);
     
     // Initialize database
     $db = Database::getInstance($dbPath);
