@@ -95,7 +95,6 @@ RAG_TOP_K=5                                                # Number of documents
 EMBEDDING_MODEL=e5-mistral-7b-instruct                     # Model for embeddings
 RAG_CHUNK_SIZE=500                                         # Size of text chunks
 RAG_CHUNK_OVERLAP=100                                      # Overlap between chunks
-RAG_BATCH_SIZE=10                                          # Batch size for processing
 DEBUG=false                                                # Enable debug mode
 EMBEDDING_API_ENDPOINT=https://chat-ai.academiccloud.de/v1/embeddings
 ```
