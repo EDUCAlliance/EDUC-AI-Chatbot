@@ -64,8 +64,13 @@ try {
     Environment::load('.env');
     log_message("Environment loaded successfully", true);
 } catch (\Exception $e) {
-    log_message("Error loading environment: " . $e->getMessage(), false, true);
-    exit(1);
+    try {
+        Environment::load('/app/code/.env');
+        log_message("Environment loaded successfully from /app/code/.env", true);
+    } catch (\Exception $e) {
+        log_message("Error loading environment: " . $e->getMessage(), false, true);
+        exit(1);
+    }
 }
 
 // Set up components
