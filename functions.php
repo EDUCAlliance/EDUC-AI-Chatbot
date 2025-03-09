@@ -296,11 +296,9 @@ function getLLMResponseWithUserHistory($userMessage, $apiKey, $endpoint, $config
                 ["role" => "user", "content" => $userMessage]
             ]
         ),
-        "extra_body" => [
-            "arcana" => [
+        "arcana" => [
                 "id" => $config['arcana']['id'],
                 "key" => $config['arcana']['key']
-            ]
         ],
         "temperature" => 0,
         "max_tokens" => 800
