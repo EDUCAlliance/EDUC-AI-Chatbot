@@ -4,11 +4,11 @@ namespace EDUC\API;
 class LLMClient {
     private string $apiKey;
     private string $endpoint;
-    private ?string $embeddingEndpoint;
+    private string $embeddingEndpoint;
     private int $maxRetries = 5;
     private int $initialBackoffMs = 1000; // 1 second
     
-    public function __construct(string $apiKey, string $endpoint, string $embeddingEndpoint = null) {
+    public function __construct(string $apiKey, string $endpoint, string $embeddingEndpoint) {
         $this->apiKey = $apiKey;
         $this->endpoint = $endpoint;
         $this->embeddingEndpoint = $embeddingEndpoint;
@@ -38,20 +38,19 @@ class LLMClient {
             "encoding_format" => "float"
         ];
         
-        // Use the dedicated embedding endpoint if provided, otherwise modify the main endpoint
-        $endpoint = null;
-        $pathSuffix = '';
-        
-        if (!empty($this->embeddingEndpoint)) {
-            // Use the dedicated embedding endpoint as is - no suffix needed
-            $endpoint = rtrim($this->embeddingEndpoint, '/');
-            // Explicitly set pathSuffix to empty string to avoid appending anything
-            $pathSuffix = '';
-        } else {
-            // Fall back to the main endpoint with modification
-            $endpoint = preg_replace('#/v1/chat/completions$#', '/v1', $this->endpoint);
-            $pathSuffix = '/embeddings';
+        // The embedding endpoint is now required and should be used directly without modification
+        if (empty($this->embeddingEndpoint)) {
+            return [
+                'success' => false,
+                'error' => 'Embedding endpoint is required but not provided',
+                'details' => 'EMBEDDING_API_ENDPOINT must be set in the environment',
+                'endpoint' => null
+            ];
         }
+        
+        // Use the dedicated embedding endpoint as is - no suffix needed
+        $endpoint = rtrim($this->embeddingEndpoint, '/');
+        $pathSuffix = '';
         
         // Log the endpoint being used for debugging
         error_log("DEBUG - Embedding API Endpoint: " . $endpoint . $pathSuffix);

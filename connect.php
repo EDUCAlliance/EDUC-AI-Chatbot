@@ -63,7 +63,8 @@ try {
     // Initialize the LLM client
     $llmClient = new LLMClient(
         Environment::get('AI_API_KEY'),
-        Environment::get('AI_API_ENDPOINT')
+        Environment::get('AI_API_ENDPOINT'),
+        Environment::get('EMBEDDING_API_ENDPOINT')
     );
     
     // Check if we should use RAG
@@ -80,9 +81,9 @@ try {
         $embeddingModel = Environment::get('EMBEDDING_MODEL', 'e5-mistral-7b-instruct');
         
         // Create custom llm client for embeddings if a different endpoint is specified
-        $embeddingEndpoint = Environment::get('EMBEDDING_API_ENDPOINT', Environment::get('AI_API_ENDPOINT'));
+        $embeddingEndpoint = Environment::get('EMBEDDING_API_ENDPOINT');
         $embeddingClient = $embeddingEndpoint !== Environment::get('AI_API_ENDPOINT') 
-            ? new LLMClient(Environment::get('AI_API_KEY'), $embeddingEndpoint)
+            ? new LLMClient(Environment::get('AI_API_KEY'), Environment::get('AI_API_ENDPOINT'), $embeddingEndpoint)
             : $llmClient;
             
         $retriever = new Retriever($embeddingClient, $embeddingRepository, $topK);

@@ -90,7 +90,8 @@ try {
     // Initialize the LLM client
     $llmClient = new LLMClient(
         Environment::get('AI_API_KEY'),
-        Environment::get('AI_API_ENDPOINT')
+        Environment::get('AI_API_ENDPOINT'),
+        Environment::get('EMBEDDING_API_ENDPOINT')
     );
     
     // Display configuration summary
