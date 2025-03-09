@@ -301,12 +301,8 @@ function getLLMResponseWithUserHistory($userMessage, $apiKey, $endpoint, $config
 
     // Add Arcana RAG parameters if configured
     if (isset($config['arcana']) && !empty($config['arcana']['id']) && !empty($config['arcana']['key'])) {
-        // Check if endpoint is compatible with Arcana
-        if (strpos($endpoint, 'chat-ai.academiccloud.de') !== false || 
-            strpos($endpoint, 'chat.gwdg.de') !== false ||
-            strpos($endpoint, 'api.academiccloud.de') !== false) {
-            // For GWDG Arcana endpoints, add Arcana parameters directly to the top level
-            $payload["arcana"] = [
+        $payload['extra_body'] = [
+            "arcana" => [
                 "id" => $config['arcana']['id'],
                 "key" => $config['arcana']['key']
             ];
