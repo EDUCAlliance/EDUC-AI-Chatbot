@@ -6,9 +6,5 @@
     ],
     "model": "qwen2.5-72b-instruct",
     "botMention": "educai",
-    "courses": "lo.json",
-    "arcana": {
-        "id": "giovanni.fonseca/Testing3",
-        "key": "YWt3V3cyQktBNW9BT2FoZFQ2cnlxS0dWUlpBaGJsV1NIRDBFUjFac01oND0="
-    }
+    "courses": "lo.json"
 }
