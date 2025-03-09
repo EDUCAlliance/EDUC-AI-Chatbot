@@ -6,9 +6,5 @@
     ],
     "model": "meta-llama-3.1-8b-rag",
     "botMention": "educai",
-    "courses": "lo.json",
-    "arcana": {
-        "id": "giovanni.fonseca/Testing3",
-        "key": "YWt3V3cyQktBNW9BT2FoZFQ2cnlxS0dWUlpBaGJsV1NIRDBFUjFac01oND0="
-    }
+    "courses": "lo.json"
 }

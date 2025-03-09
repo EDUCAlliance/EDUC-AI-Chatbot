@@ -296,15 +296,11 @@ function getLLMResponseWithUserHistory($userMessage, $apiKey, $endpoint, $config
                 ["role" => "user", "content" => $userMessage]
             ]
         ),
-        "temperature" => 0,
-        "arcana" => [
-                "id" => $config['arcana']['id'],
-                "key" => $config['arcana']['key']
-        ]
+        "temperature" => 0.1
     ];
 
     // Add Arcana RAG parameters if configured
-   /* if (isset($config['arcana']) && !empty($config['arcana']['id']) && !empty($config['arcana']['key'])) {
+   if (isset($config['arcana']) && !empty($config['arcana']['id']) && !empty($config['arcana']['key'])) {
         $payload['extra_body'] = [
             "arcana" => [
                 "id" => $config['arcana']['id'],
@@ -312,7 +308,7 @@ function getLLMResponseWithUserHistory($userMessage, $apiKey, $endpoint, $config
             ]
         ];
         error_log("Added Arcana RAG parameters to API request");
-    }*/
+    }
 
     
     // Initialize cURL session
