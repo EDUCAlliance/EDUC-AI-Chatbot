@@ -10,19 +10,22 @@ class DocumentProcessor {
     private int $chunkSize;
     private int $chunkOverlap;
     private int $batchSize;
+    private int $rateLimit;
     
     public function __construct(
         LLMClient $llmClient, 
         EmbeddingRepository $embeddingRepository,
         int $chunkSize = 500,
         int $chunkOverlap = 100,
-        int $batchSize = 10
+        int $batchSize = 10,
+        int $rateLimit = 30
     ) {
         $this->llmClient = $llmClient;
         $this->embeddingRepository = $embeddingRepository;
         $this->chunkSize = $chunkSize;
         $this->chunkOverlap = $chunkOverlap;
         $this->batchSize = $batchSize;
+        $this->rateLimit = $rateLimit;
     }
     
     public function processDocument(string $documentId, string $documentType, string $content, array $metadata = []): array {
@@ -72,6 +75,13 @@ class DocumentProcessor {
         }
         
         // Process chunks individually instead of in batches to save memory
+        // Add throttling to avoid rate limits
+        $requestCount = 0;
+        $startTime = microtime(true);
+        $callsPerMinute = $this->rateLimit; // Target max requests per minute (adjust based on API limits)
+        $minTimeBetweenCallsMs = 200; // Minimum 200ms between calls
+        $lastCallTime = 0;
+        
         foreach ($chunks as $chunkIndex => $chunk) {
             // Check memory before processing each chunk
             $memoryUsed = memory_get_usage(true);
@@ -86,6 +96,33 @@ class DocumentProcessor {
             }
             
             error_log("Processing chunk $chunkIndex of " . count($chunks));
+            
+            // Throttle API calls
+            $currentTime = microtime(true) * 1000; // Current time in ms
+            $elapsedSinceLastCall = $lastCallTime > 0 ? $currentTime - $lastCallTime : 0;
+            
+            // Ensure minimum time between calls
+            if ($elapsedSinceLastCall < $minTimeBetweenCallsMs) {
+                $sleepTime = $minTimeBetweenCallsMs - $elapsedSinceLastCall;
+                error_log("Throttling: sleeping for {$sleepTime}ms between calls");
+                usleep($sleepTime * 1000);
+            }
+            
+            // Calculate rate and throttle if needed
+            $requestCount++;
+            $elapsedTime = microtime(true) - $startTime;
+            $currentRate = $requestCount / ($elapsedTime / 60);
+            
+            if ($currentRate > $callsPerMinute && $elapsedTime > 10) { // Only throttle if we've been running for at least 10 seconds
+                $sleepNeeded = (($requestCount / $callsPerMinute) * 60 - $elapsedTime);
+                if ($sleepNeeded > 0) {
+                    error_log("Rate throttling: current rate {$currentRate} calls/min exceeds target {$callsPerMinute}. Sleeping for " . round($sleepNeeded * 1000) . "ms");
+                    usleep($sleepNeeded * 1000 * 1000); // Convert to microseconds
+                }
+            }
+            
+            // Record the start time of this call
+            $lastCallTime = microtime(true) * 1000;
             
             // Generate embedding for the chunk
             $embeddingResult = $this->llmClient->generateEmbedding($chunk);

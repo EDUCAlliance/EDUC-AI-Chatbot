@@ -16,31 +16,34 @@ class DataProcessor {
     private int $chunkSize;
     private int $chunkOverlap;
     private int $batchSize;
+    private int $rateLimit;
     
     public function __construct(
         Config $config,
         LLMClient $llmClient,
         Database $db,
-        string $dataDir = 'data',
+        string $dataDir,
         int $chunkSize = 500,
         int $chunkOverlap = 100,
-        int $batchSize = 10
+        int $batchSize = 10,
+        int $rateLimit = 30
     ) {
         $this->config = $config;
         $this->llmClient = $llmClient;
         $this->db = $db;
-        $this->embeddingRepository = new EmbeddingRepository($db);
-        $this->dataDir = $dataDir;
-        $this->chunkSize = $chunkSize;
-        $this->chunkOverlap = $chunkOverlap;
-        $this->batchSize = $batchSize;
+        $this->dataDir = rtrim($dataDir, '/');
         
+        // Initialize embedding repository
+        $this->embeddingRepository = new EmbeddingRepository($db);
+        
+        // Initialize document processor
         $this->documentProcessor = new DocumentProcessor(
-            $llmClient, 
+            $llmClient,
             $this->embeddingRepository,
             $chunkSize,
             $chunkOverlap,
-            $batchSize
+            $batchSize,
+            $rateLimit
         );
     }
     

@@ -13,6 +13,7 @@
  *   --data-dir=PATH   Specify custom data directory (default: ./data)
  *   --force           Force reprocess all documents
  *   --verbose         Show detailed output
+ *   --rate-limit=N    Maximum API requests per minute (default: 30)
  *   --help            Display this help message
  */
 
@@ -41,7 +42,7 @@ use EDUC\RAG\DataProcessor;
 use EDUC\RAG\DocumentProcessor;
 
 // Parse command line arguments
-$options = getopt('', ['data-dir::', 'force', 'verbose', 'help']);
+$options = getopt('', ['data-dir::', 'force', 'verbose', 'rate-limit::', 'help']);
 
 if (isset($options['help'])) {
     echo "EDUC AI TalkBot - RAG Data Ingestion Script\n\n";
@@ -51,6 +52,7 @@ if (isset($options['help'])) {
     echo "  --data-dir=PATH   Specify custom data directory (default: ./data)\n";
     echo "  --force           Force reprocess all documents\n";
     echo "  --verbose         Show detailed output\n";
+    echo "  --rate-limit=N    Maximum API requests per minute (default: 30)\n";
     echo "  --help            Display this help message\n";
     exit(0);
 }
@@ -58,6 +60,7 @@ if (isset($options['help'])) {
 $dataDir = $options['data-dir'] ?? __DIR__ . '/data';
 $forceReprocess = isset($options['force']);
 $verbose = isset($options['verbose']);
+$rateLimit = isset($options['rate-limit']) ? (int)$options['rate-limit'] : 30;
 
 // Helper function for logging
 function log_message($message, $isVerbose = false, $isError = false) {
@@ -91,6 +94,7 @@ try {
 try {
     $apiKey = Environment::get('AI_API_KEY');
     $apiEndpoint = Environment::get('AI_API_ENDPOINT');
+    $embeddingEndpoint = Environment::get('EMBEDDING_API_ENDPOINT', '');
     $configFile = Environment::get('AI_CONFIG_FILE', 'llm_config.json');
     $dbPath = Environment::get('DB_PATH', dirname(__FILE__) . '/database/chatbot.sqlite');
     $chunkSize = (int)Environment::get('RAG_CHUNK_SIZE', 500);
@@ -108,7 +112,7 @@ try {
     $db = Database::getInstance($dbPath);
     
     // Initialize API client
-    $llmClient = new LLMClient($apiKey, $apiEndpoint);
+    $llmClient = new LLMClient($apiKey, $apiEndpoint, $embeddingEndpoint);
     
     // Initialize embedding repository
     $embeddingRepository = new EmbeddingRepository($db);
@@ -119,7 +123,8 @@ try {
         $embeddingRepository, 
         $chunkSize, 
         $chunkOverlap, 
-        $batchSize
+        $batchSize,
+        $rateLimit
     );
     
     // Initialize data processor
@@ -130,7 +135,8 @@ try {
         $dataDir,
         $chunkSize,
         $chunkOverlap,
-        $batchSize
+        $batchSize,
+        $rateLimit
     );
     
 } catch (\Exception $e) {
