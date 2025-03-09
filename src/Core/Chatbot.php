@@ -92,7 +92,11 @@ class Chatbot {
             // Add detailed debug information about the retrieval process
             if ($this->debug) {
                 $debugInfo = "\n\nDEBUG INFO:";
-                $debugInfo .= "\nRetrieval Result: " . json_encode($retrievalResult, JSON_PRETTY_PRINT);
+                if ($retrievalResult !== null) {
+                    $debugInfo .= "\nRetrieval Result: " . json_encode($retrievalResult, JSON_PRETTY_PRINT);
+                } else {
+                    $debugInfo .= "\nRetrieval Result: null (No retrieval was performed)";
+                }
                 $debugInfo .= "\nSystem Prompt Length: " . strlen($injectedSystemPrompt) . " characters";
                 return $responseText . $debugInfo;
             }

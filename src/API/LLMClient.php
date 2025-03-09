@@ -40,9 +40,12 @@ class LLMClient {
         
         // Use the dedicated embedding endpoint if provided, otherwise modify the main endpoint
         $endpoint = null;
+        $pathSuffix = '';
+        
         if (!empty($this->embeddingEndpoint)) {
-            $endpoint = $this->embeddingEndpoint;
-            $pathSuffix = ''; // No suffix needed when using dedicated endpoint
+            // Use the dedicated embedding endpoint
+            $endpoint = rtrim($this->embeddingEndpoint, '/');
+            // No suffix needed when using dedicated endpoint
         } else {
             // Fall back to the main endpoint with modification
             $endpoint = preg_replace('#/v1/chat/completions$#', '/v1', $this->endpoint);
