@@ -69,15 +69,15 @@ class Chatbot {
         );
         
         // Extract the assistant's response
-        if (isset($response['choices'][0]['message']['content'])) {
+      if (isset($response['choices'][0]['message']['content'])) {
             $responseText = $response['choices'][0]['message']['content'];
             
             // Add debug information if requested
-            if ($this->debug && $retrievalInfo !== null) {
+           // if ($this->debug && $retrievalInfo !== null) {
                 $responseText .= $this->formatRetrievalDebugInfo($retrievalInfo);
-            }
+           // }
             
-            return $responseText;
+            return $responseText."xx";
         }
         
         // Handle error
