@@ -78,7 +78,7 @@ class Chatbot {
                 $responseText .= $this->formatRetrievalDebugInfo($retrievalInfo);
             }
             
-            return $responseText."\nDEBUG: ".json_encode($retrievalResult['matches']);
+            return $responseText."\nDEBUG: ".json_encode($retrievalResult);
         }
         
         // Handle error
