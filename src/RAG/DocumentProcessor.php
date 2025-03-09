@@ -118,16 +118,84 @@ class DocumentProcessor {
         error_log("Processing JSON document: $filePath");
         
         try {
+            // Get the file size
+            $fileSize = filesize($filePath);
+            $fileSizeMB = round($fileSize / (1024 * 1024), 2);
+            error_log("File size: $fileSizeMB MB");
+            
+            // For extremely small files, we can use a direct approach
+            if ($fileSizeMB < 0.1) {
+                error_log("Small file detected, using direct approach");
+                $jsonContent = file_get_contents($filePath);
+                $data = json_decode($jsonContent, true);
+                
+                if ($data === null) {
+                    throw new \Exception("Invalid JSON file: $filePath");
+                }
+                
+                // If it's a single object, convert to array with one item
+                if (!is_array($data) || (is_array($data) && !isset($data[0]) && count($data) > 0)) {
+                    $data = [$data];
+                }
+                
+                // Process each item
+                foreach ($data as $index => $item) {
+                    $documentId = basename($filePath) . '_' . $index;
+                    
+                    // Super simplified content
+                    if (count($item) > 20) {
+                        $item = array_slice($item, 0, 20, true);
+                    }
+                    
+                    $content = "Item " . ($index + 1) . ":\n";
+                    foreach ($item as $key => $value) {
+                        if (is_array($value) || is_object($value)) {
+                            $value = "[Complex value]";
+                        } else if (is_string($value) && strlen($value) > 100) {
+                            $value = substr($value, 0, 100) . "...";
+                        }
+                        $content .= "- $key: $value\n";
+                    }
+                    
+                    try {
+                        // Process document with minimal metadata to save memory
+                        $result = $this->processDocument(
+                            $documentId,
+                            $documentType,
+                            $content,
+                            ['source' => $filePath, 'index' => $index]
+                        );
+                        $results[] = $result;
+                    } catch (\Exception $e) {
+                        error_log("Error processing document $documentId: " . $e->getMessage());
+                    }
+                    
+                    // Clear memory
+                    unset($item);
+                    unset($content);
+                }
+                
+                // Clear memory
+                unset($data);
+                unset($jsonContent);
+                
+                // Force garbage collection
+                gc_collect_cycles();
+                
+                error_log("Finished direct processing with " . count($results) . " results");
+                
+                // Restore original memory limit
+                ini_set('memory_limit', $originalMemoryLimit);
+                
+                return $results;
+            }
+            
+            // For larger files, use the line-by-line streaming approach
             // Ultra-simple JSON streaming for large files
             $handle = fopen($filePath, 'r');
             if ($handle === false) {
                 throw new \Exception("Could not open JSON file: $filePath");
             }
-            
-            // Get the file size
-            $fileSize = filesize($filePath);
-            $fileSizeMB = round($fileSize / (1024 * 1024), 2);
-            error_log("File size: $fileSizeMB MB");
             
             // For large files (>1MB), use an even more memory-efficient approach
             $isLargeFile = $fileSizeMB > 1;
@@ -137,30 +205,8 @@ class DocumentProcessor {
             rewind($handle);
             
             if ($firstChar !== '[') {
-                // For small non-array files, just load the whole thing
-                if ($fileSizeMB < 1) {
-                    $jsonContent = file_get_contents($filePath);
-                    $data = json_decode($jsonContent, true);
-                    
-                    if ($data === null) {
-                        throw new \Exception("Invalid JSON file: $filePath");
-                    }
-                    
-                    // Process as single item
-                    $documentId = basename($filePath) . '_0';
-                    $content = is_array($data) ? $this->simpleArrayToText($data) : json_encode($data);
-                    
-                    $result = $this->processDocument(
-                        $documentId,
-                        $documentType,
-                        $content,
-                        is_array($data) ? $data : ['content' => $data]
-                    );
-                    
-                    return [$result];
-                } else {
-                    throw new \Exception("Large JSON files must be arrays (starting with '[')");
-                }
+                fclose($handle);
+                throw new \Exception("JSON files must be arrays (starting with '[')");
             }
             
             // For array files, use a simplified line-by-line parsing approach
@@ -168,17 +214,49 @@ class DocumentProcessor {
             
             // Keep track of items processed
             $itemIndex = 0;
-            // Use smaller batch size for large files
-            $batchSize = $isLargeFile ? 2 : 5;
+            // Use tiny batch size for all files now
+            $batchSize = 1; // Process 1 at a time for all files
             $currentBatch = [];
             
             // Simple state tracking
             $currentItem = '';
             $braceCount = 0;
-            $inArray = false;
+            
+            // Keep track of memory
+            $initialMemory = memory_get_usage(true);
+            $peakMemory = $initialMemory;
+            $lastMemoryCheck = time();
             
             // Process line by line
             while (($line = fgets($handle)) !== false) {
+                // Monitor memory usage periodically
+                if (time() - $lastMemoryCheck > 5) {
+                    $currentMemory = memory_get_usage(true);
+                    $peakMemory = max($peakMemory, $currentMemory);
+                    $memoryDiff = $currentMemory - $initialMemory;
+                    
+                    error_log(sprintf(
+                        "Memory usage: %.2f MB (peak: %.2f MB, diff: %.2f MB)",
+                        $currentMemory / 1024 / 1024,
+                        $peakMemory / 1024 / 1024,
+                        $memoryDiff / 1024 / 1024
+                    ));
+                    
+                    $lastMemoryCheck = time();
+                }
+                
+                // Check if we're out of memory
+                $memoryLimit = $this->getMemoryLimitBytes();
+                $memoryUsed = memory_get_usage(true);
+                
+                // If we're within 200MB of the limit, stop processing
+                if ($memoryLimit > 0 && ($memoryLimit - $memoryUsed) < 200 * 1024 * 1024) {
+                    error_log("Memory limit approaching, stopping processing. Used: " . 
+                          round($memoryUsed / (1024 * 1024), 2) . "MB of " . 
+                          round($memoryLimit / (1024 * 1024), 2) . "MB");
+                    break;
+                }
+                
                 // If we're between items or at the start
                 if (trim($line) === '[' || trim($line) === ',' || trim($line) === ']') {
                     continue; // Skip array markers
@@ -194,106 +272,31 @@ class DocumentProcessor {
                 
                 // Once we've seen a balanced set of braces, we have a complete item
                 if ($braceCount === 0 && !empty($currentItem)) {
+                    // If we've detected memory pressure, stop processing
+                    if ($peakMemory - $initialMemory > 1000 * 1024 * 1024) { // 1GB increase
+                        error_log("Memory pressure detected, stopping processing");
+                        break;
+                    }
+                    
                     // Clean up the item - remove trailing commas
                     $currentItem = rtrim($currentItem, ",\r\n ");
                     
-                    // Parse the item
-                    try {
-                        $item = json_decode($currentItem, true);
+                    // Parse the item - use a separate function to contain memory usage
+                    $this->processJsonItem($currentItem, $filePath, $documentType, $itemIndex, $results);
+                    
+                    // Increment item index
+                    $itemIndex++;
+                    
+                    // Log progress periodically
+                    if ($itemIndex % 10 === 0) {
+                        error_log("Processed $itemIndex JSON items");
                         
-                        if ($item !== null) {
-                            $documentId = basename($filePath) . '_' . $itemIndex;
-                            
-                            // For large files, immediately process each item to save memory
-                            if ($isLargeFile) {
-                                try {
-                                    // Simplify item to plain text to reduce memory
-                                    $content = $this->simpleArrayToText($item);
-                                    
-                                    // Process one document at a time
-                                    $result = $this->processDocument(
-                                        $documentId,
-                                        $documentType,
-                                        $content,
-                                        $item
-                                    );
-                                    $results[] = $result;
-                                    
-                                    // Clear memory immediately
-                                    unset($content);
-                                    unset($item);
-                                    
-                                    // Force garbage collection every item for large files
-                                    gc_collect_cycles();
-                                    
-                                } catch (\Exception $e) {
-                                    error_log("Error processing document: " . $e->getMessage());
-                                }
-                            } else {
-                                // For smaller files, batch processing is fine
-                                // Simplify item to plain text to reduce memory
-                                $content = $this->simpleArrayToText($item);
-                                
-                                $currentBatch[] = [
-                                    'id' => $documentId,
-                                    'type' => $documentType,
-                                    'content' => $content,
-                                    'metadata' => $item
-                                ];
-                            }
-                            
-                            $itemIndex++;
-                            
-                            // Process a small batch at a time (only for non-large files)
-                            if (!$isLargeFile && count($currentBatch) >= $batchSize) {
-                                foreach ($currentBatch as $doc) {
-                                    try {
-                                        // Process one document at a time instead of batches
-                                        $result = $this->processDocument(
-                                            $doc['id'],
-                                            $doc['type'],
-                                            $doc['content'],
-                                            $doc['metadata']
-                                        );
-                                        $results[] = $result;
-                                    } catch (\Exception $e) {
-                                        error_log("Error processing document: " . $e->getMessage());
-                                    }
-                                    
-                                    // Clear document from memory
-                                    unset($doc);
-                                }
-                                
-                                // Clear the batch
-                                $currentBatch = [];
-                                
-                                // Force garbage collection
-                                gc_collect_cycles();
-                                
-                                error_log("Processed $itemIndex JSON items");
-                            }
-                        }
-                    } catch (\Exception $e) {
-                        error_log("Error parsing JSON item: " . $e->getMessage());
+                        // Force garbage collection periodically
+                        gc_collect_cycles();
                     }
                     
                     // Reset for next item
                     $currentItem = '';
-                }
-            }
-            
-            // Process any remaining items
-            foreach ($currentBatch as $doc) {
-                try {
-                    $result = $this->processDocument(
-                        $doc['id'],
-                        $doc['type'],
-                        $doc['content'],
-                        $doc['metadata']
-                    );
-                    $results[] = $result;
-                } catch (\Exception $e) {
-                    error_log("Error processing document: " . $e->getMessage());
                 }
             }
             
@@ -321,22 +324,271 @@ class DocumentProcessor {
     }
     
     /**
+     * Process a single JSON item to isolate memory usage
+     * 
+     * @param string $jsonString JSON string to process
+     * @param string $filePath Source file path
+     * @param string $documentType Document type
+     * @param int $itemIndex Item index
+     * @param array &$results Results array to append to
+     */
+    private function processJsonItem(string $jsonString, string $filePath, string $documentType, int $itemIndex, array &$results): void {
+        try {
+            // Parse the item
+            $item = json_decode($jsonString, true);
+            
+            if ($item !== null) {
+                $documentId = basename($filePath) . '_' . $itemIndex;
+                
+                // Super simplified content - only use a few fields to save memory
+                if (count($item) > 10) {
+                    // Extract just a few important fields to reduce size
+                    $tempItem = [];
+                    $keysToKeep = array_slice(array_keys($item), 0, 10);
+                    
+                    foreach ($keysToKeep as $key) {
+                        if (isset($item[$key])) {
+                            $tempItem[$key] = $item[$key];
+                        }
+                    }
+                    
+                    $item = $tempItem;
+                    unset($tempItem);
+                }
+                
+                // Simplify item to plain text to reduce memory - use directTextConversion
+                // which is more efficient than simpleArrayToText
+                $content = $this->directTextConversion($item);
+                
+                // Process one document at a time
+                $result = $this->processDocument(
+                    $documentId,
+                    $documentType,
+                    $content,
+                    ['source' => $filePath, 'index' => $itemIndex] // Minimal metadata
+                );
+                
+                $results[] = $result;
+                
+                // Clear memory immediately
+                unset($content);
+                unset($item);
+                
+                // Force garbage collection within each item
+                gc_collect_cycles();
+            }
+        } catch (\Exception $e) {
+            error_log("Error processing JSON item: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Direct text conversion method - even more memory efficient than simpleArrayToText
+     * 
+     * @param array $data Array to convert
+     * @return string Text representation
+     */
+    private function directTextConversion(array $data): string {
+        $maxKeyLength = 30;
+        $maxValueLength = 100;
+        $text = '';
+        $count = 0;
+        
+        foreach ($data as $key => $value) {
+            $count++;
+            
+            // Limit to 20 keys max
+            if ($count > 20) {
+                $text .= "... [Additional fields truncated] ...\n";
+                break;
+            }
+            
+            // Truncate long keys
+            if (strlen($key) > $maxKeyLength) {
+                $key = substr($key, 0, $maxKeyLength) . '...';
+            }
+            
+            // Format the value
+            if ($value === null) {
+                $formattedValue = 'null';
+            } else if (is_bool($value)) {
+                $formattedValue = $value ? 'true' : 'false';
+            } else if (is_array($value)) {
+                $formattedValue = '[Array with ' . count($value) . ' items]';
+            } else if (is_object($value)) {
+                $formattedValue = '[Object]';
+            } else if (is_numeric($value)) {
+                $formattedValue = (string)$value;
+            } else {
+                $formattedValue = (string)$value;
+                
+                // Truncate long values
+                if (strlen($formattedValue) > $maxValueLength) {
+                    $formattedValue = substr($formattedValue, 0, $maxValueLength) . '...';
+                }
+            }
+            
+            $text .= $key . ': ' . $formattedValue . "\n";
+        }
+        
+        return $text;
+    }
+    
+    /**
+     * Split a text segment into chunks (used by splitIntoChunks)
+     * 
+     * @param string $text Text segment to split
+     * @return array Array of chunks
+     */
+    private function splitSegmentIntoChunks(string $text): array {
+        $chunks = [];
+        
+        // Handle whitespace more efficiently - no regex for large strings
+        // Replace consecutive spaces with a single space
+        $text = str_replace("\r\n", " ", $text);
+        $text = str_replace("\n", " ", $text);
+        $text = str_replace("\r", " ", $text);
+        $text = str_replace("\t", " ", $text);
+        
+        // Remove consecutive spaces more efficiently without regex
+        while (strpos($text, "  ") !== false) {
+            $text = str_replace("  ", " ", $text);
+        }
+        
+        // Simple split by character count
+        $textLength = strlen($text);
+        $chunkStart = 0;
+        
+        while ($chunkStart < $textLength) {
+            // Check if we have enough memory left
+            $memoryUsed = memory_get_usage(true);
+            $memoryLimit = $this->getMemoryLimitBytes();
+            
+            // If we're within 100MB of the limit, stop processing
+            if ($memoryLimit > 0 && ($memoryLimit - $memoryUsed) < 100 * 1024 * 1024) {
+                error_log("Memory limit approaching, stopping chunk processing. Used: " . 
+                          round($memoryUsed / (1024 * 1024), 2) . "MB of " . 
+                          round($memoryLimit / (1024 * 1024), 2) . "MB");
+                break;
+            }
+            
+            $chunkEnd = $chunkStart + min($this->chunkSize, 200); // Limit max chunk size to 200
+            
+            // Adjust chunk end to avoid splitting in the middle of a word
+            if ($chunkEnd < $textLength) {
+                // Look for the first space after the chunk size, but don't look too far
+                $nextSpace = strpos($text, ' ', $chunkEnd);
+                if ($nextSpace !== false && $nextSpace < $chunkEnd + 20) { // Only look 20 chars ahead
+                    $chunkEnd = $nextSpace;
+                }
+            } else {
+                $chunkEnd = $textLength;
+            }
+            
+            // Add the chunk
+            $chunk = substr($text, $chunkStart, $chunkEnd - $chunkStart);
+            $chunks[] = $chunk;
+            
+            // Move the start position for the next chunk, accounting for overlap
+            $chunkStart = $chunkEnd - min($this->chunkOverlap, 20); // Limit overlap to 20
+            
+            // Make sure we don't go backward
+            if ($chunkStart <= 0) {
+                $chunkStart = $chunkEnd;
+            }
+            
+            // Free memory
+            unset($chunk);
+        }
+        
+        return $chunks;
+    }
+    
+    /**
+     * Get the memory limit in bytes
+     * 
+     * @return int Memory limit in bytes
+     */
+    private function getMemoryLimitBytes(): int {
+        $memoryLimit = ini_get('memory_limit');
+        
+        if ($memoryLimit === '-1') {
+            return 0; // Unlimited
+        }
+        
+        $unit = strtolower(substr($memoryLimit, -1));
+        $value = intval(substr($memoryLimit, 0, -1));
+        
+        switch ($unit) {
+            case 'g':
+                $value *= 1024;
+                // fall through
+            case 'm':
+                $value *= 1024;
+                // fall through
+            case 'k':
+                $value *= 1024;
+        }
+        
+        return $value;
+    }
+    
+    /**
+     * Get the maximum depth of a nested array
+     * 
+     * @param array $array Array to check
+     * @param int $maxDepthToCheck Maximum depth to check to avoid excessive recursion
+     * @return int Maximum depth
+     */
+    private function getArrayDepth(array $array, int $maxDepthToCheck = 3): int {
+        // Limited depth check to avoid recursion issues
+        if ($maxDepthToCheck <= 0) {
+            return 1;
+        }
+        
+        $maxDepth = 1;
+        
+        // Only check a sample of array elements to save memory
+        $sampleSize = min(count($array), 5);
+        $sample = array_slice($array, 0, $sampleSize, true);
+        
+        foreach ($sample as $value) {
+            if (is_array($value)) {
+                // Reduce maxDepthToCheck for recursion
+                $depth = $this->getArrayDepth($value, $maxDepthToCheck - 1) + 1;
+                $maxDepth = max($maxDepth, $depth);
+                
+                // If we've already reached our limit, stop checking
+                if ($maxDepth >= $maxDepthToCheck) {
+                    return $maxDepth;
+                }
+            }
+        }
+        
+        return $maxDepth;
+    }
+    
+    /**
      * Simple array to text conversion to minimize memory usage
      * 
      * @param array $array Array to convert
      * @return string Text representation
      */
     private function simpleArrayToText(array $array): string {
+        // For extremely large arrays, just return a summary
+        if (count($array) > 1000) {
+            return "[Large array with " . count($array) . " elements - truncated]";
+        }
+        
         $text = '';
-        $maxKeyLength = 0;
-        $maxValueLength = 500; // Limit value length to 500 chars
-        $maxKeys = 100; // Limit to 100 keys max
+        $maxValueLength = 200; // Limit value length to 200 chars (reduced from 500)
+        $maxKeys = 50; // Limit to 50 keys max (reduced from 100)
         $keyCount = 0;
         
         // For very large arrays, just take the first portion
         if (count($array) > $maxKeys) {
             $array = array_slice($array, 0, $maxKeys, true);
-            $text .= "[Warning: Array truncated due to size. Only showing first $maxKeys keys]\n";
+            $text .= "[Array truncated. Only showing first $maxKeys keys]\n";
         }
         
         foreach ($array as $key => $value) {
@@ -352,93 +604,28 @@ class DocumentProcessor {
                 continue;
             }
             
-            // For nested arrays, handle specially
+            // Handle different value types
             if (is_array($value)) {
-                // Check depth to avoid memory issues
-                if ($this->getArrayDepth($value) > 2) {
-                    // For deeply nested arrays, just count elements
-                    $count = count($value);
-                    $value = "[Nested array with $count elements]";
-                } else {
-                    // For shallow arrays, flatten
-                    $value = $this->flattenArray($value, $maxValueLength);
-                }
+                // Just count elements
+                $count = count($value);
+                $value = "[Array with $count elements]";
             } else if (is_object($value)) {
-                // For objects, convert to string
+                // For objects, just note the type
                 $value = "[Object]";
-            } 
+            } else if (is_bool($value)) {
+                $value = $value ? 'true' : 'false';
+            }
             
             // Truncate long values to save memory
             if (is_string($value) && strlen($value) > $maxValueLength) {
                 $value = substr($value, 0, $maxValueLength) . '...';
             }
             
+            // Add the key-value pair to the text
             $text .= $key . ': ' . $value . "\n";
         }
         
         return $text;
-    }
-    
-    /**
-     * Get the maximum depth of a nested array
-     * 
-     * @param array $array Array to check
-     * @return int Maximum depth
-     */
-    private function getArrayDepth(array $array): int {
-        $maxDepth = 1;
-        
-        foreach ($array as $value) {
-            if (is_array($value)) {
-                $depth = $this->getArrayDepth($value) + 1;
-                $maxDepth = max($maxDepth, $depth);
-            }
-        }
-        
-        return $maxDepth;
-    }
-    
-    /**
-     * Flatten an array to a string representation, truncating if necessary
-     * 
-     * @param array $array Array to flatten
-     * @param int $maxLength Maximum length of the output string
-     * @return string Flattened array
-     */
-    private function flattenArray(array $array, int $maxLength = 500): string {
-        $result = '';
-        $count = 0;
-        $maxItems = 10;
-        
-        foreach ($array as $key => $value) {
-            if ($count >= $maxItems) {
-                $result .= ", ... [" . (count($array) - $maxItems) . " more items]";
-                break;
-            }
-            
-            if ($count > 0) {
-                $result .= ', ';
-            }
-            
-            if (is_array($value)) {
-                $value = "[Nested array]";
-            } else if (is_object($value)) {
-                $value = "[Object]";
-            } else if (is_string($value) && strlen($value) > 50) {
-                $value = substr($value, 0, 50) . '...';
-            }
-            
-            $result .= $key . ': ' . $value;
-            $count++;
-            
-            // Check length and truncate if needed
-            if (strlen($result) > $maxLength) {
-                $result = substr($result, 0, $maxLength) . '...';
-                break;
-            }
-        }
-        
-        return $result;
     }
     
     private function splitIntoChunks(string $text): array {
@@ -475,50 +662,6 @@ class DocumentProcessor {
         } else {
             // For smaller texts, use the original method
             $chunks = $this->splitSegmentIntoChunks($text);
-        }
-        
-        return $chunks;
-    }
-    
-    /**
-     * Split a text segment into chunks (used by splitIntoChunks)
-     * 
-     * @param string $text Text segment to split
-     * @return array Array of chunks
-     */
-    private function splitSegmentIntoChunks(string $text): array {
-        $chunks = [];
-        
-        // Remove excessive whitespace
-        $text = preg_replace('/\s+/', ' ', $text);
-        
-        // Simple split by character count
-        $textLength = strlen($text);
-        $chunkStart = 0;
-        
-        while ($chunkStart < $textLength) {
-            $chunkEnd = $chunkStart + $this->chunkSize;
-            
-            // Adjust chunk end to avoid splitting in the middle of a word
-            if ($chunkEnd < $textLength) {
-                // Look for the first space after the chunk size
-                $nextSpace = strpos($text, ' ', $chunkEnd);
-                if ($nextSpace !== false && $nextSpace < $chunkEnd + 50) { // Only look 50 chars ahead
-                    $chunkEnd = $nextSpace;
-                }
-            } else {
-                $chunkEnd = $textLength;
-            }
-            
-            $chunks[] = substr($text, $chunkStart, $chunkEnd - $chunkStart);
-            
-            // Move the start position for the next chunk, accounting for overlap
-            $chunkStart = $chunkEnd - $this->chunkOverlap;
-            
-            // Make sure we don't go backward
-            if ($chunkStart <= 0) {
-                $chunkStart = $chunkEnd;
-            }
         }
         
         return $chunks;
