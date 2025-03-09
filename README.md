@@ -167,8 +167,8 @@ Options:
 
 Example:
 ```bash
-# Process all documents in the default data directory
-php ingest-data.php
+# Process all documents in the default data directory (with the embeddings api rate limt)
+php ingest-data.php  --rate-limit=10
 
 # Process documents in a custom directory with verbose output
 php ingest-data.php --data-dir=./custom-data --verbose
