@@ -121,7 +121,7 @@ DEBUG=false                                                # Enable debug mode
 5. Make sure your web server can write to the database directory:
 ```bash
 mkdir -p database
-chmod 755 database
+touch database/chatbot.sqlite && chmod -R 755 database/chatbot.sqlite && chown -R www-data:www-data database
 ```
 
 ### Database Setup
