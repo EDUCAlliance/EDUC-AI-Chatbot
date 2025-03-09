@@ -297,7 +297,6 @@ function getLLMResponseWithUserHistory($userMessage, $apiKey, $endpoint, $config
             ]
         ),
         "temperature" => 0,
-        "top_p" => 0.05,
         "arcana" => [
                 "id" => $config['arcana']['id'],
                 "key" => $config['arcana']['key']
