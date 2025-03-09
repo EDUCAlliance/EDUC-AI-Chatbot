@@ -41,7 +41,13 @@ class Retriever {
             return [
                 'success' => true,
                 'matches' => [],
-                'content' => ""
+                'content' => "",
+                'debug' => [
+                    'query' => $query,
+                    'embedding_model' => $queryEmbeddingResult['model'] ?? 'unknown',
+                    'top_k' => $this->topK,
+                    'matches_found' => 0
+                ]
             ];
         }
         
@@ -53,10 +59,29 @@ class Retriever {
         // Combine content into a single string
         $combinedContent = implode("\n\n", $contents);
         
+        // Enhanced debug information
+        $matchesInfo = array_map(function($match) {
+            return [
+                'document_id' => $match['document_id'],
+                'similarity' => $match['similarity'],
+                'content_preview' => mb_substr($match['content'], 0, 150) . (mb_strlen($match['content']) > 150 ? '...' : ''),
+                'content_length' => mb_strlen($match['content']),
+                'metadata' => $match['metadata'] ?? []
+            ];
+        }, $similarEmbeddings);
+        
         return [
             'success' => true,
             'matches' => $similarEmbeddings,
-            'content' => $combinedContent
+            'content' => $combinedContent,
+            'debug' => [
+                'query' => $query,
+                'embedding_model' => $queryEmbeddingResult['model'] ?? 'unknown',
+                'top_k' => $this->topK,
+                'matches_found' => count($similarEmbeddings),
+                'matches_info' => $matchesInfo,
+                'total_content_length' => mb_strlen($combinedContent)
+            ]
         ];
     }
     

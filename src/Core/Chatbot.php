@@ -72,8 +72,8 @@ class Chatbot {
         if (isset($response['choices'][0]['message']['content'])) {
             $responseText = $response['choices'][0]['message']['content'];
             
-            // Add debug information if requested
-            if ($this->debug && $retrievalInfo !== null) {
+            // Add debug information for RAG results, regardless of debug mode
+            if ($retrievalInfo !== null) {
                 $responseText .= $this->formatRetrievalDebugInfo($retrievalInfo);
             }
             
@@ -105,16 +105,49 @@ class Chatbot {
     }
     
     private function formatRetrievalDebugInfo(array $retrievalInfo): string {
-        $debugInfo = "\n\n---\n[Debug Information - Not Part of Response]\n";
-        $debugInfo .= "Retrieved " . count($retrievalInfo['matches']) . " relevant documents:\n";
+        $debugInfo = "\n\n---\n[RAG Debug Information]\n";
         
-        foreach ($retrievalInfo['matches'] as $index => $match) {
-            $similarity = round($match['similarity'] * 100, 2);
-            $docId = $match['document_id'];
-            $content = substr($match['content'], 0, 100) . (strlen($match['content']) > 100 ? '...' : '');
-            
-            $debugInfo .= "\n[$index] Document: $docId (Relevance: $similarity%)\n";
-            $debugInfo .= "    Content: $content\n";
+        // Add query and general info
+        if (isset($retrievalInfo['debug'])) {
+            $debug = $retrievalInfo['debug'];
+            $debugInfo .= "Query: \"{$debug['query']}\"\n";
+            $debugInfo .= "Embedding Model: {$debug['embedding_model']}\n";
+            $debugInfo .= "Top-K: {$debug['top_k']}\n";
+            $debugInfo .= "Matches Found: {$debug['matches_found']}\n";
+            if (isset($debug['total_content_length'])) {
+                $debugInfo .= "Total Content Length: {$debug['total_content_length']} chars\n";
+            }
+        }
+        
+        // Document details
+        $debugInfo .= "\nRetrieved Documents:\n";
+        
+        if (empty($retrievalInfo['matches'])) {
+            $debugInfo .= "No relevant documents found.\n";
+        } else {
+            foreach ($retrievalInfo['matches'] as $index => $match) {
+                $similarity = round($match['similarity'] * 100, 2);
+                $docId = $match['document_id'];
+                
+                $debugInfo .= "\n[$index] Document ID: $docId (Relevance: $similarity%)\n";
+                
+                // Add metadata if available
+                if (isset($match['metadata']) && !empty($match['metadata'])) {
+                    $debugInfo .= "    Metadata: " . json_encode($match['metadata']) . "\n";
+                }
+                
+                // Add content preview
+                if (isset($retrievalInfo['debug']['matches_info'][$index]['content_preview'])) {
+                    $preview = $retrievalInfo['debug']['matches_info'][$index]['content_preview'];
+                    $length = $retrievalInfo['debug']['matches_info'][$index]['content_length'] ?? 'unknown';
+                    $debugInfo .= "    Content Length: $length chars\n";
+                    $debugInfo .= "    Preview: $preview\n";
+                } else {
+                    // Fallback to old preview method
+                    $content = substr($match['content'], 0, 150) . (strlen($match['content']) > 150 ? '...' : '');
+                    $debugInfo .= "    Content: $content\n";
+                }
+            }
         }
         
         return $debugInfo;
