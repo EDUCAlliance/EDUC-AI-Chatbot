@@ -13,6 +13,7 @@ class Chatbot {
     private UserMessageRepository $messageRepository;
     private ?Retriever $retriever;
     private bool $debug;
+    private const MAX_HISTORY_MESSAGES = 20; // Define max history messages
     
     public function __construct(
         Config $config,
@@ -29,22 +30,20 @@ class Chatbot {
         $this->debug = $debug;
     }
     
-    public function processUserMessage(string $message, string $userId, string $userName): string {
-        // Log the user message
-        $this->messageRepository->logMessage($userId, $message);
+    public function processUserMessage(string $messageContent, string $userId, string $userName): string {
+        // 1. Log the user's message to history
+        $this->messageRepository->logChatMessage($userId, 'user', $messageContent);
         
-        // Get the system prompt from config
-        $systemPrompt = $this->config->get('systemPrompt', '');
+        // 2. Prepare the initial prompt parts
+        $systemPromptContent = $this->config->get('systemPrompt');
+        $model = $this->config->get('model');
         
-        // Inject user info into system prompt
-        $injectedSystemPrompt = $this->injectUserInfoIntoSystemPrompt($systemPrompt, $userName, $userId);
-        
-        // Apply RAG if available
+        // 3. Apply RAG augmentation to the system prompt if enabled
         $retrievalInfo = null;
         $retrievalResult = null;
-        if ($this->retriever != null) {
-            error_log("DEBUG - Starting RAG retrieval for message: " . substr($message, 0, 100));
-            $retrievalResult = $this->retriever->retrieveRelevantContent($message);
+        if ($this->retriever !== null) {
+            error_log("DEBUG - Starting RAG retrieval for message: " . substr($messageContent, 0, 100));
+            $retrievalResult = $this->retriever->retrieveRelevantContent($messageContent);
             
             if (!$retrievalResult['success']) {
                 error_log("DEBUG - RAG retrieval failed: " . json_encode($retrievalResult));
@@ -54,7 +53,8 @@ class Chatbot {
             }
             
             if ($retrievalResult['success'] && !empty($retrievalResult['matches'])) {
-                $injectedSystemPrompt = $this->retriever->augmentPrompt($injectedSystemPrompt, $message, $retrievalResult);
+                // Augment the system prompt string directly
+                $systemPromptContent = $this->retriever->augmentPrompt($systemPromptContent, $messageContent, $retrievalResult);
                 $retrievalInfo = $retrievalResult;
                 error_log("DEBUG - System prompt augmented with RAG content");
             } else {
@@ -62,74 +62,64 @@ class Chatbot {
             }
         }
         
-        // Prepare messages for API call
-        $messages = array_merge(
-            [
-                ["role" => "system", "content" => $injectedSystemPrompt]
-            ],
-            $this->config->get('responseExamples', []),
-            [
-                ["role" => "user", "content" => $message]
-            ]
-        );
+        // Add user name info to the system prompt AFTER potential RAG augmentation
+        $systemPromptContent = "User Name: {$userName}\nUser ID: {$userId}\n\n" . $systemPromptContent;
         
-        // Generate response
-        $response = $this->llmClient->generateResponse(
-            $messages,
-            $this->config->get('model', ''),
-            0.1
-        );
+        // 4. Retrieve chat history
+        $chatHistory = $this->messageRepository->getChatHistory($userId, self::MAX_HISTORY_MESSAGES);
         
-        // Extract the assistant's response
-      if (isset($response['choices'][0]['message']['content'])) {
-            $responseText = $response['choices'][0]['message']['content'];
+        // 5. Prepare the final messages array for the API
+        $messages = [
+            ["role" => "system", "content" => $systemPromptContent]
+        ];
+        $messages = array_merge($messages, $chatHistory);
+        
+        // Note: The current user message is already included at the end of $chatHistory
+        // Note: responseExamples are no longer included
+
+        // 6. Generate response from LLM
+        $responsePayload = $this->llmClient->generateResponse($messages, $model, 0.1);
+        
+        // 7. Process and log the response
+        if (isset($responsePayload['choices'][0]['message']['content'])) {
+            $assistantResponseContent = $responsePayload['choices'][0]['message']['content'];
+            
+            // Log the assistant's response
+            $this->messageRepository->logChatMessage($userId, 'assistant', $assistantResponseContent);
             
             // Add debug information if requested
-            if ($this->debug && $retrievalInfo !== null) {
-                $responseText .= $this->formatRetrievalDebugInfo($retrievalInfo);
-            }
-            
-            // Add detailed debug information about the retrieval process
             if ($this->debug) {
-                $debugInfo = "\n\nDEBUG INFO:";
-                if ($retrievalResult !== null) {
-                    $debugInfo .= "\nRetrieval Result: " . json_encode($retrievalResult, JSON_PRETTY_PRINT);
-                } else {
-                    $debugInfo .= "\nRetrieval Result: null (No retrieval was performed)";
+                if ($retrievalInfo !== null) {
+                    $assistantResponseContent .= $this->formatRetrievalDebugInfo($retrievalInfo);
                 }
-                $debugInfo .= "\nSystem Prompt Length: " . strlen($injectedSystemPrompt) . " characters";
-                return $responseText . $debugInfo;
+                // Add other debug info as needed
+                $debugDetails = [
+                    'retrieval_result' => $retrievalResult, // RAG result
+                    'system_prompt_length' => strlen($systemPromptContent),
+                    'history_length' => count($chatHistory),
+                    'llm_request' => $messages, // What was sent to LLM
+                    'llm_response' => $responsePayload // Raw LLM response
+                ];
+                $assistantResponseContent .= "\n\n--- DEBUG INFO ---\n" . json_encode($debugDetails, JSON_PRETTY_PRINT);
             }
             
-            return $responseText;
+            return $assistantResponseContent;
+        } else {
+            // Handle error
+            $errorMessage = "Error in API response. Details logged to server error log.";
+            if (isset($responsePayload['error'])) {
+                $errorMessage .= "\nAPI Error: " . ($responsePayload['error']['message'] ?? 'Unknown error');
+                error_log("LLM API Error: " . json_encode($responsePayload['error']));
+            } else {
+                error_log("LLM API Error: Unexpected response structure: " . json_encode($responsePayload));
+            }
+            // Do NOT log this error message itself as an assistant response
+            return $errorMessage; // Return error message to be sent back to user
         }
-        
-        // Handle error
-        $errorMessage = "Error in API response. Details logged to server error log.";
-        
-        if (isset($response['error'])) {
-            $errorMessage .= "\n\nAPI Error: " . ($response['error']['message'] ?? 'Unknown error');
-        }
-        
-        return $errorMessage;
-    }
-    
-    private function injectUserInfoIntoSystemPrompt(string $systemPrompt, string $userName, string $userId): string {
-        // Retrieve the user's message history
-        $history = $this->messageRepository->getUserMessageHistory($userId);
-        
-        // Build the history string
-        $historyString = "\n--- Last " . count($history) . " messages from $userName ---\n";
-        foreach ($history as $entry) {
-            $historyString .= "[" . $entry['timestamp'] . "] " . $entry['message'] . "\n";
-        }
-        
-        // Inject user info and history into the system prompt
-        return "User Name: $userName\n" . $systemPrompt . "\n" . $historyString;
     }
     
     private function formatRetrievalDebugInfo(array $retrievalInfo): string {
-        $debugInfo = "\n\n---\n[Debug Information - Not Part of Response]\n";
+        $debugInfo = "\n\n---\n[RAG Debug Info]\n";
         $debugInfo .= "Retrieved " . count($retrievalInfo['matches']) . " relevant documents:\n";
         
         foreach ($retrievalInfo['matches'] as $index => $match) {
@@ -137,8 +127,7 @@ class Chatbot {
             $docId = $match['document_id'];
             $content = substr($match['content'], 0, 100) . (strlen($match['content']) > 100 ? '...' : '');
             
-            $debugInfo .= "\n[$index] Document: $docId (Relevance: $similarity%)\n";
-            $debugInfo .= "    Content: $content\n";
+            $debugInfo .= "[$index] Doc: $docId (Rel: $similarity%): $content\n";
         }
         
         return $debugInfo;

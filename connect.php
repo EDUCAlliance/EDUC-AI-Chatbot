@@ -7,8 +7,8 @@ use EDUC\Core\Chatbot;
 use EDUC\API\LLMClient;
 use EDUC\Database\Database;
 use EDUC\RAG\Retriever;
-use EDUC\RAG\DataProcessor;
 use EDUC\Database\EmbeddingRepository;
+use EDUC\Core\ConfigRepository;
 
 // Load environment variables
 try {
@@ -53,13 +53,27 @@ $id_of_user = $data['actor']['id'];
 
 // Initialize components
 try {
-    // Initialize the configuration
-    $config = Config::getInstance(Environment::get('AI_CONFIG_FILE'));
-    
-    // Initialize the database
+    // Initialize the database first
     $dbPath = Environment::get('DB_PATH', dirname(__FILE__) . '/database/chatbot.sqlite');
-    $db = Database::getInstance($dbPath);
-    
+    $db = new Database($dbPath);
+
+    // Initialize the ConfigRepository
+    $configRepo = new ConfigRepository($db);
+
+    // Try loading initial config from JSON if DB is empty (using root path)
+    $initialConfigPath = dirname(__FILE__) . '/llm_config.json';
+    if (file_exists($initialConfigPath)) {
+        $configRepo->loadInitialConfigFromJson($initialConfigPath);
+        // Optionally delete the file after successful initial load
+        // unlink($initialConfigPath);
+    } else {
+        // Log if initial config file not found, but continue as defaults will be used
+        error_log("Optional initial config file not found: {$initialConfigPath}");
+    }
+
+    // Initialize the Config singleton using the repository
+    $config = Config::initialize($configRepo);
+
     // Initialize the LLM client
     $llmClient = new LLMClient(
         Environment::get('AI_API_KEY'),
@@ -92,8 +106,8 @@ try {
     // Initialize the chatbot with debug mode if enabled
     $chatbot = new Chatbot($config, $llmClient, $db, $retriever, $debug);
     
-    // Get the bot mention from config
-    $botMention = $config->get('botMention', '');
+    // Get the bot mention from the now DB-backed config
+    $botMention = $config->get('botMention');
     
     // Check if the bot is mentioned
     if (stripos($message, '@' . $botMention) === false) {
@@ -105,8 +119,9 @@ try {
     $llmResponse = $chatbot->processUserMessage($message, $id_of_user, $name_of_user);
     
 } catch (\Exception $e) {
-    error_log("Error initializing components: " . $e->getMessage());
-    $llmResponse = "Sorry, I encountered an error: " . $e->getMessage();
+    error_log("Error initializing components or processing message: " . $e->getMessage() . " Stack Trace: " . $e->getTraceAsString());
+    // Provide a generic error message to the user
+    $llmResponse = "Sorry, I encountered an internal error and couldn't process your request. Please try again later.";
 }
 
 // 4. Send a reply to the chat
