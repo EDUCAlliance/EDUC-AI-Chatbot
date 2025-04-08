@@ -30,7 +30,7 @@ $appRoot = dirname(__DIR__); // Goes from /app/code/public up to /app/code
 $rootDir = $appRoot . '/public'; // Keep $rootDir as public if other paths rely on it, but less ideal
 
 // Load the .env file from the *application* root directory
-loadEnv($appRoot . '/.env');
+loadEnv('/app/code/.env');
 
 // Include Composer's autoloader from the *application* root directory's vendor folder
 require_once $appRoot . '/vendor/autoload.php';
