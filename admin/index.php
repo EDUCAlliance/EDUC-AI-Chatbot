@@ -2,10 +2,9 @@
 session_start();
 
 require_once __DIR__ . '/config.php';
-// NOTE: Assuming you have a PSR-4 autoloader set up (e.g., via Composer)
-// If not, you'll need manual require_once statements for Database and ConfigRepository
-require_once $rootDir . '/src/Core/Database.php';
-require_once $rootDir . '/src/Core/ConfigRepository.php';
+// Autoloader is now included via config.php, manual requires are no longer needed.
+// require_once $rootDir . '/src/Core/Database.php';
+// require_once $rootDir . '/src/Core/ConfigRepository.php';
 
 use Educ\Talkbot\Core\Database;
 use Educ\Talkbot\Core\ConfigRepository;

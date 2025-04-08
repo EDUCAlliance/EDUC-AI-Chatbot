@@ -31,8 +31,8 @@ $rootDir = dirname(__DIR__);
 // Load the .env file from the root directory
 loadEnv($rootDir . '/.env');
 
-// TODO: Add autoloader if necessary (e.g., Composer's)
-// require_once $rootDir . '/vendor/autoload.php';
+// Include Composer's autoloader
+require_once $rootDir . '/vendor/autoload.php';
 
 // Function to get the admin password
 function getAdminPassword(): string
