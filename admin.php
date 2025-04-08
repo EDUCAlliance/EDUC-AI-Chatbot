@@ -1,10 +1,10 @@
 <?php
 session_start();
 
-require_once __DIR__ . '/config.php';
-// Autoloader is now included via config.php, manual requires are no longer needed.
-// require_once $rootDir . '/src/Core/Database.php';
-// require_once $rootDir . '/src/Core/ConfigRepository.php';
+// Update path to the renamed config file in the root directory
+require_once __DIR__ . '/admin_config.php'; 
+
+// Autoloader is included via admin_config.php
 
 use Educ\Talkbot\Core\Database;
 use Educ\Talkbot\Core\ConfigRepository;
@@ -19,26 +19,31 @@ $currentConfig = [
 ];
 
 try {
-    $db = new Database(); // Uses DB_PATH from .env
+    // $rootDir is defined in admin_config.php
+    $db = new Database(); // Uses DB_PATH from .env loaded by admin_config.php
     $configRepo = new ConfigRepository($db);
 
     // Try loading initial config from JSON if table is empty
-    $initialConfigPath = $rootDir . '/llm_config.json'; // Use root dir path
-    $configRepo->loadInitialConfigFromJson($initialConfigPath);
+    // Use $rootDir from the included config file
+    $initialConfigPath = $rootDir . '/llm_config.json'; 
+    if (file_exists($initialConfigPath)) {
+       $configRepo->loadInitialConfigFromJson($initialConfigPath);
+       // Consider adding unlink($initialConfigPath); here after confirmation it works
+    } 
 
 } catch (Exception $e) {
     $errorMessage = "Database Initialization Error: " . $e->getMessage();
-    // Prevent further operations if DB connection fails
     $configRepo = null;
 }
 
 // Handle login
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
     try {
-        $correctPassword = getAdminPassword();
+        $correctPassword = getAdminPassword(); // Function from admin_config.php
         if (hash_equals($correctPassword, $_POST['password'])) {
             $_SESSION['admin_logged_in'] = true;
-            header('Location: index.php'); // Redirect to avoid form resubmission
+            // Redirect to the current script name
+            header('Location: admin.php'); 
             exit;
         } else {
             $errorMessage = 'Invalid password.';
@@ -51,7 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
 // Handle logout
 if (isset($_GET['logout'])) {
     session_destroy();
-    header('Location: index.php');
+    // Redirect to the current script name
+    header('Location: admin.php');
     exit;
 }
 
@@ -75,17 +81,19 @@ if ($isLoggedIn && $configRepo) {
         } else {
             $errorMessage = 'Failed to save configuration.';
         }
+        // Reload config after saving to show updated values immediately
+        $currentConfig = $configRepo->getAllConfig(); 
+    } else {
+      // Load current configuration for display if not saving
+      $currentConfig = $configRepo->getAllConfig();
     }
 
-    // Load current configuration for display
-    $currentConfig = $configRepo->getAllConfig();
     // Ensure default keys exist even if not in DB yet
     $currentConfig['systemPrompt'] = $currentConfig['systemPrompt'] ?? '';
     $currentConfig['model'] = $currentConfig['model'] ?? '';
     $currentConfig['botMention'] = $currentConfig['botMention'] ?? '';
 
 } elseif ($isLoggedIn && !$configRepo) {
-    // Handle case where user is logged in but DB failed
     $errorMessage = "Database connection failed. Cannot load or save configuration.";
 }
 
@@ -101,12 +109,20 @@ if ($isLoggedIn && $configRepo) {
         .container { max-width: 800px; margin: auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
         .form-group { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; }
-        input[type="text"], input[type="password"], textarea { width: 100%; padding: 8px; box-sizing: border-box; }
-        input[type="submit"] { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        input[type="text"], input[type="password"], textarea { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 3px; }
+        textarea { min-height: 150px; }
+        input[type="submit"] { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 1em; }
         input[type="submit"]:hover { background-color: #0056b3; }
-        .error { color: red; margin-bottom: 10px; }
-        .success { color: green; margin-bottom: 10px; }
-        h1, h2 { text-align: center; }
+        .error { color: red; margin-bottom: 10px; padding: 10px; border: 1px solid red; background-color: #ffecec; border-radius: 3px; }
+        .success { color: green; margin-bottom: 10px; padding: 10px; border: 1px solid green; background-color: #e8fadf; border-radius: 3px; }
+        h1, h2 { text-align: center; color: #333; }
+        h1 { margin-bottom: 30px; }
+        h2 { margin-bottom: 20px; margin-top: 0; }
+        label { font-weight: bold; color: #555; }
+        .logout-link { text-align: right; margin-bottom: 15px; }
+        .logout-link a { color: #007bff; text-decoration: none; }
+        .logout-link a:hover { text-decoration: underline; }
+        form { background-color: #f9f9f9; padding: 20px; border-radius: 5px; border: 1px solid #eee; }
     </style>
 </head>
 <body>
@@ -129,13 +145,13 @@ if ($isLoggedIn && $configRepo) {
                 </div>
                 <input type="submit" value="Login">
             </form>
-        <?php elseif ($configRepo): // Only show config form if DB connection is okay ?>
-            <p style="text-align: right;"><a href="?logout=1">Logout</a></p>
+        <?php elseif ($configRepo): ?>
+            <div class="logout-link"><a href="?logout=1">Logout</a></div>
             <h2>Configuration</h2>
             <form method="post">
                 <div class="form-group">
                     <label for="system_prompt">System Prompt:</label>
-                    <textarea id="system_prompt" name="system_prompt" rows="10" required><?php echo htmlspecialchars($currentConfig['systemPrompt']); ?></textarea>
+                    <textarea id="system_prompt" name="system_prompt" required><?php echo htmlspecialchars($currentConfig['systemPrompt']); ?></textarea>
                 </div>
                 <div class="form-group">
                     <label for="model">LLM Model:</label>
@@ -147,9 +163,9 @@ if ($isLoggedIn && $configRepo) {
                 </div>
                 <input type="submit" name="save_config" value="Save Configuration">
             </form>
-        <?php else: // Logged in but DB error ?>
-             <p style="text-align: right;"><a href="?logout=1">Logout</a></p>
-             <p>Could not connect to the database to load configuration.</p>
+        <?php else: ?>
+             <div class="logout-link"><a href="?logout=1">Logout</a></div>
+             <p class="error">Could not connect to the database to load configuration.</p>
         <?php endif; ?>
     </div>
 </body>

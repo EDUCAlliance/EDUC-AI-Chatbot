@@ -25,13 +25,13 @@ function loadEnv($path)
     }
 }
 
-// Determine the root directory assuming admin is one level down
-$rootDir = dirname(__DIR__);
+// Define the root directory (current directory since this file is in the root)
+$rootDir = __DIR__;
 
 // Load the .env file from the root directory
 loadEnv($rootDir . '/.env');
 
-// Include Composer's autoloader
+// Include Composer's autoloader (using $rootDir)
 require_once $rootDir . '/vendor/autoload.php';
 
 // Function to get the admin password
