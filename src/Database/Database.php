@@ -1,14 +1,19 @@
 <?php
 namespace EDUC\Database;
 
+use EDUC\Core\Environment; // Need Environment to load initial config path
+
 class Database {
     private \PDO $connection;
     private static ?Database $instance = null;
+    private bool $settingsInitialized = false; // Flag to track settings initialization
 
     private function __construct(string $dbPath) {
         $this->connection = new \PDO("sqlite:" . $dbPath);
         $this->connection->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
         $this->initialize();
+        // Initialize settings after tables are ensured
+        $this->initializeSettings();
     }
 
     public static function getInstance(string $dbPath): self {
@@ -19,11 +24,17 @@ class Database {
     }
 
     private function initialize(): void {
-        // Create user_messages table if it doesn't exist
+        // Drop old user_messages table if it exists (to change structure)
+        // Warning: This deletes existing chat history!
+        // Consider a more sophisticated migration strategy for production.
+        $this->connection->exec("DROP TABLE IF EXISTS user_messages");
+
+        // Create NEW user_messages table with role and assistant_response
         $this->connection->exec("CREATE TABLE IF NOT EXISTS user_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT,
-            message TEXT,
+            user_id TEXT NOT NULL,
+            role TEXT NOT NULL,  -- 'user' or 'assistant'
+            message TEXT NOT NULL,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )");
 
@@ -46,6 +57,49 @@ class Database {
             content TEXT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )");
+
+        // Create settings table if it doesn't exist
+        $this->connection->exec("CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )");
+    }
+
+    // New method to initialize settings from llm_config.json if settings table is empty
+    private function initializeSettings(): void {
+        if ($this->settingsInitialized) return; // Only run once per instance
+
+        $stmt = $this->connection->query("SELECT COUNT(*) FROM settings");
+        $count = $stmt->fetchColumn();
+
+        if ($count == 0) {
+            // Settings table is empty, load from llm_config.json
+            $configPath = Environment::get('AI_CONFIG_FILE', 'llm_config.json');
+            if (file_exists($configPath)) {
+                $configContent = file_get_contents($configPath);
+                $config = json_decode($configContent, true);
+
+                if ($config && json_last_error() === JSON_ERROR_NONE) {
+                    $systemPrompt = $config['systemPrompt'] ?? '';
+                    $model = $config['model'] ?? '';
+                    $botMention = $config['botMention'] ?? '';
+
+                    if (!empty($systemPrompt) && !empty($model) && !empty($botMention)) {
+                        $this->saveSetting('systemPrompt', $systemPrompt);
+                        $this->saveSetting('model', $model);
+                        $this->saveSetting('botMention', $botMention);
+                        error_log("Initialized settings from $configPath");
+                    } else {
+                        error_log("Could not initialize settings: required keys missing in $configPath");
+                    }
+                } else {
+                    error_log("Could not initialize settings: Error parsing $configPath: " . json_last_error_msg());
+                }
+            } else {
+                error_log("Could not initialize settings: Config file $configPath not found.");
+            }
+        }
+        $this->settingsInitialized = true;
     }
 
     public function getConnection(): \PDO {
@@ -95,5 +149,25 @@ class Database {
         $stmt->execute($params);
         
         return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    // Method to get a specific setting
+    public function getSetting(string $key, $default = null): ?string {
+        $stmt = $this->query("SELECT value FROM settings WHERE key = :key", [':key' => $key]);
+        $result = $stmt->fetch(\PDO::FETCH_ASSOC);
+        return $result ? $result['value'] : $default;
+    }
+
+    // Method to save/update a specific setting
+    public function saveSetting(string $key, string $value): void {
+        // Using REPLACE INTO for simplicity (requires key to be PRIMARY KEY or UNIQUE)
+        $stmt = $this->connection->prepare("REPLACE INTO settings (key, value) VALUES (:key, :value)");
+        $stmt->execute([':key' => $key, ':value' => $value]);
+    }
+
+    // Method to get all settings
+    public function getAllSettings(): array {
+        $stmt = $this->query("SELECT key, value FROM settings");
+        return $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Returns an associative array [key => value]
     }
 } 

@@ -2,13 +2,12 @@
 require_once 'vendor/autoload.php';
 
 use EDUC\Core\Environment;
-use EDUC\Core\Config;
 use EDUC\Core\Chatbot;
 use EDUC\API\LLMClient;
 use EDUC\Database\Database;
 use EDUC\RAG\Retriever;
+use EDUC\RAG\DataProcessor;
 use EDUC\Database\EmbeddingRepository;
-use EDUC\Core\ConfigRepository;
 
 // Load environment variables
 try {
@@ -53,27 +52,10 @@ $id_of_user = $data['actor']['id'];
 
 // Initialize components
 try {
-    // Initialize the database first
+    // Initialize the database
     $dbPath = Environment::get('DB_PATH', dirname(__FILE__) . '/database/chatbot.sqlite');
-    $db = new Database($dbPath);
-
-    // Initialize the ConfigRepository
-    $configRepo = new ConfigRepository($db);
-
-    // Try loading initial config from JSON if DB is empty (using root path)
-    $initialConfigPath = dirname(__FILE__) . '/llm_config.json';
-    if (file_exists($initialConfigPath)) {
-        $configRepo->loadInitialConfigFromJson($initialConfigPath);
-        // Optionally delete the file after successful initial load
-        // unlink($initialConfigPath);
-    } else {
-        // Log if initial config file not found, but continue as defaults will be used
-        error_log("Optional initial config file not found: {$initialConfigPath}");
-    }
-
-    // Initialize the Config singleton using the repository
-    $config = Config::initialize($configRepo);
-
+    $db = Database::getInstance($dbPath);
+    
     // Initialize the LLM client
     $llmClient = new LLMClient(
         Environment::get('AI_API_KEY'),
@@ -92,7 +74,6 @@ try {
         
         // Get RAG configuration from environment or use defaults
         $topK = (int)Environment::get('RAG_TOP_K', 5);
-        $embeddingModel = Environment::get('EMBEDDING_MODEL', 'e5-mistral-7b-instruct');
         
         // Create custom llm client for embeddings if a different endpoint is specified
         $embeddingEndpoint = Environment::get('EMBEDDING_API_ENDPOINT');
@@ -103,11 +84,15 @@ try {
         $retriever = new Retriever($embeddingClient, $embeddingRepository, $topK);
     }
     
-    // Initialize the chatbot with debug mode if enabled
-    $chatbot = new Chatbot($config, $llmClient, $db, $retriever, $debug);
+    // Initialize the chatbot without config, with debug mode if enabled
+    $chatbot = new Chatbot($llmClient, $db, $retriever, $debug);
     
-    // Get the bot mention from the now DB-backed config
-    $botMention = $config->get('botMention');
+    // Get the bot mention from the database settings
+    $botMention = $db->getSetting('botMention', 'defaultBotMention');
+    if (empty($botMention)) {
+        error_log("Warning: botMention setting not found in database, using fallback.");
+        $botMention = 'AI';
+    }
     
     // Check if the bot is mentioned
     if (stripos($message, '@' . $botMention) === false) {
@@ -119,9 +104,8 @@ try {
     $llmResponse = $chatbot->processUserMessage($message, $id_of_user, $name_of_user);
     
 } catch (\Exception $e) {
-    error_log("Error initializing components or processing message: " . $e->getMessage() . " Stack Trace: " . $e->getTraceAsString());
-    // Provide a generic error message to the user
-    $llmResponse = "Sorry, I encountered an internal error and couldn't process your request. Please try again later.";
+    error_log("Error initializing components or processing message: " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
+    $llmResponse = "Sorry, I encountered an internal error. Please try again later or contact an administrator if the problem persists.";
 }
 
 // 4. Send a reply to the chat
@@ -164,8 +148,14 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
 // Execute the API request and store the response
 $response = curl_exec($ch);
 
+// Check for cURL errors
+if(curl_errno($ch)){
+    error_log('Curl error in connect.php: ' . curl_error($ch));
+}
+
 // Close the cURL session
 curl_close($ch);
 
 // Optional: Log or handle the response for debugging purposes
+error_log("Reply sent to Nextcloud Talk. API response: " . $response);
 ?>

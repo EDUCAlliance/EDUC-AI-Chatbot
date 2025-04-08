@@ -4,58 +4,70 @@ This is a project within the EDUC ThinkLab that connects Nextcloud Talk with AI 
 
 ## Installation Guide
 
-First, register the bot with Nextcloud using the OCC command. This tells Nextcloud to send a webhook to your `connect.php` script for messages in chats where the bot is active. Remember the secret token you define here.
+First of all, you have to install a bot. The term "register" would almost be more appropriate here, as you simply tell Nextcloud to send a webhook to a specific URL after each message (as soon as this bot is activated in the chat) - It is also important to remember the secret token, because the script must encrypt the message with this token in order to be able to respond back.
 
 ```bash
-# Replace placeholders with your actual values
-cd /path/to/nextcloud/occ && \\
-sudo -u www-data php occ talk:bot:install "My EDUC Bot" "YOUR_STRONG_SECRET_TOKEN" "https://yourdomain.com/path/to/connect.php" --features webhook,response
+cd /path/to/nextcloud-occ-file && sudo -u www-data php occ talk:bot:install -f webhook,response "Name of the Bot" "XXXX-Secrect-Token-XXXX" "https://Domain-of-Nextcloud.de/connect.php"
 ```
 
-Check the installation:
+If you want to check if the "installation" of the bot is correct, you can see a list of all bots with this command (you should now also be able to activate the bot in the Conversation settings of a Nextcloud Talk Chat):
 
 ```bash
 sudo -u www-data php occ talk:bot:list
 ```
 
-More OCC Commands: https://nextcloud-talk.readthedocs.io/en/latest/occ/#talkbotinstall
+More OCC Commands can you find here: https://nextcloud-talk.readthedocs.io/en/latest/occ/#talkbotinstall
 
 ## Project Structure and Implementation
 
-### Key Components
+### Object-Oriented Architecture
 
-- **`connect.php`**: Entry point that receives webhooks from Nextcloud Talk.
-- **`admin/`**: Contains a simple web-based admin panel to configure the bot.
-- **`src/Core/`**: Core classes like `Chatbot`, `Config`, `Environment`, `ConfigRepository`.
-- **`src/API/`**: `LLMClient` for interacting with the AI API.
-- **`src/Database/`**: `Database` connection handler, `UserMessageRepository` (for chat history), `EmbeddingRepository` (for RAG document embeddings).
-- **`src/RAG/`**: `Retriever` and `DataProcessor` for RAG functionality.
-- **`ingest-data.php`**: Script to process documents and store embeddings for RAG.
-- **`data/`**: (You create this) Directory to store documents for RAG ingestion.
+The project uses a object-oriented approach with the following key components:
 
-### Workflow
+1. **Core Components**
+   - `Environment`: Manages environment variables
+   - `Config`: Handles configuration loading and access
+   - `Chatbot`: Main class that processes messages and coordinates other components
 
-1. Nextcloud Talk sends a webhook to `connect.php`.
-2. The script verifies the signature using the `BOT_TOKEN`.
-3. If the bot is mentioned (using the name configured in the admin panel), the message is processed.
-4. The `Chatbot` class fetches configuration from the database (via `ConfigRepository`).
-5. It retrieves recent chat history (`role`/`content` pairs) for the user from the database.
-6. If RAG is enabled (`USE_RAG=true`), the `Retriever` finds relevant document chunks based on the user message.
-7. The system prompt (from DB config) is combined with RAG context (if any) and user info.
-8. The system prompt and chat history are sent to the LLM API via `LLMClient`.
-9. The LLM response is received and logged to the chat history database.
-10. The response is sent back to the Nextcloud Talk conversation.
+2. **API Integration**
+   - `LLMClient`: Handles communication with the AI API endpoint
+
+3. **Database Layer**
+   - `Database`: Manages SQLite database connections
+   - `EmbeddingRepository`: Stores and retrieves vector embeddings
+
+4. **RAG Implementation**
+   - `Retriever`: Manages semantic retrieval of relevant information
+   - `DataProcessor`: Processes data for RAG functionality
+
+### Webhook Flow
+
+1. Nextcloud Talk sends a webhook to `connect.php`
+2. The script verifies the signature using the shared secret
+3. If the bot is mentioned, the message is processed
+4. The script uses the AI API to generate a response
+5. A reply is sent back to the conversation in Nextcloud Talk
+
+### RAG Implementation Details
+
+The Retrieval Augmented Generation implementation:
+
+- Uses SQLite to store document embeddings
+- Generates embeddings for user queries to find relevant context
+- Augments the LLM prompt with retrieved information
+- Configurable parameters such as top-k results and embedding model
+- Supports separate embedding endpoints if needed
 
 ## Setup and Configuration
 
 ### Requirements
 
-- PHP 7.4 or higher (8.x recommended)
-- PDO SQLite extension for PHP
+- PHP 7.4 or higher
+- SQLite extension for PHP
 - cURL extension for PHP
 - Composer for dependency management
-- A Nextcloud instance with the Talk app installed
-- Access to an LLM API (e.g., GWDG Chat-AI, OpenAI compatible) with chat completions and optionally embeddings endpoints.
+- A Nextcloud instance with Talk app installed
+- Access to an AI API (GWDG AI API or compatible)
 
 ### Installation Steps
 
@@ -70,100 +82,141 @@ cd educ-ai-talkbot
 composer install
 ```
 
-3. Create and configure the `.env` file (copy from `.env.example`):
-```dotenv
-BOT_TOKEN=YOUR_STRONG_SECRET_TOKEN     # MUST match the token used in occ talk:bot:install
-NC_URL=your.nextcloud.instance.url     # Your Nextcloud domain (without https://)
-ADMIN_PASSWORD=                      # Optional: Set a specific password for /admin login.
-                                         # If empty, BOT_TOKEN is used as the admin password.
-
-# Core AI Configuration
-AI_API_KEY=your_llm_api_key_here
-AI_API_ENDPOINT=https://your.llm.api/v1/chat/completions
-DB_PATH=database/chatbot.sqlite      # Path to the SQLite database file
-DEBUG=false                          # Set true for verbose debug output in chat
-
-# RAG Configuration
-USE_RAG=true                         # Set false to disable RAG
-EMBEDDING_API_ENDPOINT=https://your.embedding.api/v1/embeddings # Can be same as AI_API_ENDPOINT
-EMBEDDING_MODEL=e5-mistral-7b-instruct  # Embedding model name
-RAG_TOP_K=5                          # How many document chunks to retrieve
+3. Create the `.env` file:
+```
+BOT_TOKEN=XXXXX                                            # The token from Nextcloud bot registration
+AI_API_KEY=XXXXXXXXX                                       # Your AI API key
+NC_URL=domain-of-nextcloud-server.de                       # Your Nextcloud domain
+AI_API_ENDPOINT=https://chat-ai.academiccloud.de/v1/chat/completions  # API endpoint
+AI_CONFIG_FILE=llm_config.json                             # Path to config file
+DB_PATH=database/chatbot.sqlite                            # Path to SQLite database
+USE_RAG=true                                               # Enable/disable RAG
+RAG_TOP_K=5                                                # Number of documents to retrieve
+EMBEDDING_MODEL=e5-mistral-7b-instruct                     # Model for embeddings
+RAG_CHUNK_SIZE=500                                         # Size of text chunks
+RAG_CHUNK_OVERLAP=100                                      # Overlap between chunks
+DEBUG=false                                                # Enable debug mode
+EMBEDDING_API_ENDPOINT=https://chat-ai.academiccloud.de/v1/embeddings
 ```
 
-4. **Admin Panel Setup:**
-   - Navigate to `https://yourdomain.com/path/to/admin/` in your browser.
-   - Log in using your `ADMIN_PASSWORD` (or `BOT_TOKEN` if `ADMIN_PASSWORD` is not set in `.env`).
-   - Configure the **System Prompt**, **LLM Model** (name expected by your API endpoint), and **Bot Mention Name**.
-   - The initial configuration will be loaded from `llm_config.json` on the first visit if the database is empty. **You should delete `llm_config.json` after the first successful run.**
+4. Create the LLM configuration file (`llm_config.json`):
+```json
+{
+  "model": "meta-llama-3.1-8b-instruct",
+  "botMention": "AI Assistant",
+  "systemPrompt": "You are a helpful AI assistant for the EDUC project.",
+  "responseExamples": [
+    {
+      "role": "user",
+      "content": "What can you help me with?"
+    },
+    {
+      "role": "assistant",
+      "content": "I can answer questions, provide information, and help with various tasks related to EDUC projects."
+    }
+  ]
+}
+```
 
-5. Set up web server permissions:
+5. Make sure your web server can write to the database directory:
 ```bash
-# Create the database directory if it doesn't exist
 mkdir -p database
-# Ensure the web server user (e.g., www-data, apache, nginx) can write to the database file and directory
-touch database/chatbot.sqlite
-chown -R www-data:www-data database
-chmod -R u+rwX,g+rX,o+rX database # Adjust permissions as needed for your server setup
+touch database/chatbot.sqlite && chmod -R 755 database/chatbot.sqlite && chown -R www-data:www-data database
 ```
 
 ### Database Setup
 
-The SQLite database (`database/chatbot.sqlite` by default) is automatically created and initialized when the application (`connect.php` or `admin/index.php`) runs for the first time. It contains tables for:
+The SQLite database will be automatically created on first use. The system uses several tables:
 
-- `configuration`: Stores settings managed via the admin panel (system prompt, model, bot mention).
-- `chat_history`: Stores conversation history as `role`/`content` pairs for each user.
-- `embeddings`: Stores document chunk embeddings for RAG.
-- `documents`: Stores metadata about ingested RAG documents.
+- `user_messages`: Stores chat history
+- `embeddings`: Stores document embeddings for RAG
+- `documents`: Stores information about ingested documents
 
 ### RAG Data Ingestion
 
-If `USE_RAG=true`, you need to populate the RAG database.
+To use the RAG functionality, you need to ingest data into the system. This process transforms your documents into vector embeddings that can be retrieved when users ask questions.
 
-1. Create a `data/` directory in the project root:
+#### Document Storage
+
+1. Create a `/data` directory in your project root:
 ```bash
-mkdir data
+mkdir -p data
 chmod 755 data
 ```
-2. Place your knowledge base documents (.txt, .md, .json, .csv) into the `data/` directory.
-3. Run the ingestion script:
+
+2. Place your knowledge base documents in this directory. The system supports:
+   - Plain text files (.txt)
+   - Markdown files (.md)
+   - JSON files (.json)
+   - CSV files (.csv)
+
+#### Document Processing
+
+The system includes a dedicated data ingestion script (`ingest-data.php`) that processes your documents and creates embeddings for the RAG system.
+
 ```bash
 php ingest-data.php [options]
 ```
-**Common Options:**
-- `--data-dir=PATH`: Specify a different data directory (default: `./data`).
-- `--force`: Reprocess all documents, even if already in the database.
-- `--rate-limit=N`: Limit processing to N requests per minute (useful for APIs with rate limits, e.g., `--rate-limit=10`).
-- `--verbose`: Show detailed output.
 
-**Example:** Process documents with rate limiting:
+Options:
+- `--data-dir=PATH` - Specify custom data directory (default: ./data)
+- `--force` - Force reprocess all documents
+- `--verbose` - Show detailed output
+- `--help` - Display help message
+
+Example:
 ```bash
-php ingest-data.php --rate-limit=10
-```
-This script reads documents, splits them into chunks (size based on environment variables in `.env.example` if you need to customize), generates embeddings using the `EMBEDDING_API_ENDPOINT`, and stores them in the `embeddings` table.
+# Process all documents in the default data directory (with the embeddings api rate limt)
+php ingest-data.php  --rate-limit=10
 
-**Run `ingest-data.php` whenever you add or update documents in the `data/` directory.**
+# Process documents in a custom directory with verbose output
+php ingest-data.php --data-dir=./custom-data --verbose
+
+# Force reprocessing of all documents
+php ingest-data.php --force
+```
+
+This script will:
+1. Scan the data directory for supported files
+2. Generate embeddings for each document
+3. Store the embeddings in the SQLite database
+4. Report processing status for each file
+
+#### Chunking Strategy
+
+The system automatically splits documents into semantic chunks for better retrieval:
+
+- Text chunks are configured by the RAG_CHUNK_SIZE environment variable (default: 500 tokens)
+- Chunks have overlap to prevent information loss at boundaries (configurable via RAG_CHUNK_OVERLAP)
+- The system processes documents in batches for efficiency (configurable via RAG_BATCH_SIZE)
+
+#### Updating the Knowledge Base
+
+Whenever you add new documents or update existing ones, run the ingestion script again. The system will:
+- Add embeddings for new documents
+- Update embeddings for modified documents (when using the --force option)
+
+The RAG system doesn't automatically ingest documents when the bot receives a webhook call. You must manually run the ingestion process whenever your knowledge base changes.
 
 ## Features
 
-- Connects Nextcloud Talk to an LLM API.
-- Simple web admin panel (`/admin`) for configuration (System Prompt, Model, Bot Name).
-- Configuration stored in SQLite database.
-- Maintains user-specific conversation history (role/content format) in SQLite.
-- Optional Retrieval Augmented Generation (RAG) using a local SQLite vector store.
-- RAG data ingestion script (`ingest-data.php`).
-- Configurable RAG parameters (embedding model, top-k, chunking via env vars for ingest script).
-- Debug mode (`DEBUG=true` in `.env`) for verbose output in chat.
+The Talkbot has the following features:
+
+- Connection to the Chat-AI API from GWDG
+- Persistent user history tracking via SQLite
+- Retrieval Augmented Generation for context-aware responses
+- Configurable AI model and parameters
+- Support for different embedding models
+- Debug mode for troubleshooting
 
 ## Troubleshooting
 
-- **Permissions:** Ensure the web server user has write access to the `database/` directory and `database/chatbot.sqlite` file.
-- **`.env` File:** Verify all required variables are set correctly in `.env` and the file is readable.
-- **Admin Panel:** Check if you can log in to `/admin` and save the configuration. The database should be created on first access.
-- **Webhook:** Ensure the webhook URL in Nextcloud points correctly to your `connect.php` and the `BOT_TOKEN` matches.
-- **Logs:** Check your PHP error logs (`error_log` in PHP settings) and web server logs for detailed error messages.
-- **RAG:** If RAG isn't working, check `USE_RAG=true`, ensure `EMBEDDING_API_ENDPOINT` is correct, and run `php ingest-data.php` after placing files in `data/`. Use `DEBUG=true` to see retrieval details.
-- **Database:** You can inspect the `database/chatbot.sqlite` file using tools like `sqlite3` or DB Browser for SQLite.
+- Check the PHP error logs for detailed error messages
+- Ensure all required permissions are set for the database directory
+- Verify that your API keys and endpoints are correct
+- Make sure the bot token matches the one registered in Nextcloud
+- If RAG functionality is not working, check if embeddings are being properly stored
 
 ## Contributing
 
-Contributions are welcome. Please follow standard Git workflow (fork, branch, pull request).
+Contributions to the EDUC AI TalkBot are welcome. Please follow the standard guidelines for contributing.
