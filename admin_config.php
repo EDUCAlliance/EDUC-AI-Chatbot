@@ -25,14 +25,14 @@ function loadEnv($path)
     }
 }
 
-// Define the root directory (current directory since this file is in the root)
-$rootDir = __DIR__;
+// Define the project root directory (one level up from public where this file is)
+$projectRoot = dirname(__DIR__); // This should resolve to /app/code
 
-// Load the .env file from the root directory
-loadEnv('/app/code/.env');
+// Load the .env file from the project root directory
+loadEnv($projectRoot . '/.env');
 
-// Include Composer's autoloader (using $rootDir)
-require_once $rootDir . '/vendor/autoload.php';
+// Include Composer's autoloader from the public/vendor directory
+require_once __DIR__ . '/vendor/autoload.php'; // Use __DIR__ which is /app/code/public
 
 // Function to get the admin password
 function getAdminPassword(): string

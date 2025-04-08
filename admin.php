@@ -1,14 +1,12 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+// Remove temporary error reporting if present
+// ini_set('display_errors', 1);
+// ini_set('display_startup_errors', 1);
+// error_reporting(E_ALL);
 
-session_start();
+// session_start(); // REMOVED SESSION START
 
-// Update path to the renamed config file in the root directory
-require_once __DIR__ . '/admin_config.php'; 
-
-// Autoloader is included via admin_config.php
+require_once __DIR__ . '/admin_config.php';
 
 use Educ\Talkbot\Core\Database;
 use Educ\Talkbot\Core\ConfigRepository;
@@ -23,53 +21,34 @@ $currentConfig = [
 ];
 
 try {
-    // $rootDir is defined in admin_config.php
-    $db = new Database(); // Uses DB_PATH from .env loaded by admin_config.php
+    // $projectRoot is defined in admin_config.php
+    $db = new Database(); 
     $configRepo = new ConfigRepository($db);
 
     // Try loading initial config from JSON if table is empty
-    // Use $rootDir from the included config file
-    $initialConfigPath = $rootDir . '/llm_config.json'; 
+    $initialConfigPath = $projectRoot . '/llm_config.json'; 
     if (file_exists($initialConfigPath)) {
        $configRepo->loadInitialConfigFromJson($initialConfigPath);
-       // Consider adding unlink($initialConfigPath); here after confirmation it works
+       // unlink($initialConfigPath); // Consider unlinking after success
     } 
 
 } catch (Exception $e) {
-    $errorMessage = "Database Initialization Error: " . $e->getMessage();
+    // Log the full error for server-side debugging
+    error_log("Admin Panel DB/Config Init Error: " . $e->getMessage() . "\n" . $e->getTraceAsString());
+    // Set a user-friendly error message
+    $errorMessage = "Database Initialization Error: Could not connect or initialize configuration. Check server logs.";
     $configRepo = null;
 }
 
-// Handle login
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
-    try {
-        $correctPassword = getAdminPassword(); // Function from admin_config.php
-        if (hash_equals($correctPassword, $_POST['password'])) {
-            $_SESSION['admin_logged_in'] = true;
-            // Redirect to the current script name
-            header('Location: admin.php'); 
-            exit;
-        } else {
-            $errorMessage = 'Invalid password.';
-        }
-    } catch (Exception $e) {
-        $errorMessage = 'Error: ' . $e->getMessage();
-    }
-}
+// REMOVED LOGIN HANDLING BLOCK
 
-// Handle logout
-if (isset($_GET['logout'])) {
-    session_destroy();
-    // Redirect to the current script name
-    header('Location: admin.php');
-    exit;
-}
+// REMOVED LOGOUT HANDLING BLOCK
 
-$isLoggedIn = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
+// $isLoggedIn = true; // REMOVED - No longer tracking login state
 
-// Logic for logged-in users
-if ($isLoggedIn && $configRepo) {
-    // Handle saving configuration
+// Logic now runs if config repository loaded successfully
+if ($configRepo) { 
+    // Handle saving configuration (POST request)
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_config'])) {
         $systemPrompt = $_POST['system_prompt'] ?? '';
         $model = $_POST['model'] ?? '';
@@ -83,22 +62,22 @@ if ($isLoggedIn && $configRepo) {
         if ($saved) {
             $successMessage = 'Configuration saved successfully.';
         } else {
-            $errorMessage = 'Failed to save configuration.';
+            $errorMessage = 'Failed to save one or more configuration values. Check server logs.';
         }
         // Reload config after saving to show updated values immediately
         $currentConfig = $configRepo->getAllConfig(); 
     } else {
-      // Load current configuration for display if not saving
-      $currentConfig = $configRepo->getAllConfig();
+        // Load current configuration for display (GET request)
+        $currentConfig = $configRepo->getAllConfig();
     }
 
     // Ensure default keys exist even if not in DB yet
-    $currentConfig['systemPrompt'] = $currentConfig['systemPrompt'] ?? '';
-    $currentConfig['model'] = $currentConfig['model'] ?? '';
-    $currentConfig['botMention'] = $currentConfig['botMention'] ?? '';
+    $currentConfig['systemPrompt'] = $currentConfig['systemPrompt'] ?? 'Default system prompt not found in DB.';
+    $currentConfig['model'] = $currentConfig['model'] ?? 'Default model not found in DB.';
+    $currentConfig['botMention'] = $currentConfig['botMention'] ?? 'Default bot mention not found in DB.';
 
-} elseif ($isLoggedIn && !$configRepo) {
-    $errorMessage = "Database connection failed. Cannot load or save configuration.";
+} elseif (empty($errorMessage)) { // Only set this if no DB init error occurred earlier
+    $errorMessage = "Configuration could not be loaded. Config Repository is not available.";
 }
 
 ?>
@@ -127,11 +106,16 @@ if ($isLoggedIn && $configRepo) {
         .logout-link a { color: #007bff; text-decoration: none; }
         .logout-link a:hover { text-decoration: underline; }
         form { background-color: #f9f9f9; padding: 20px; border-radius: 5px; border: 1px solid #eee; }
+        .security-warning { color: #d9534f; background-color: #f2dede; border: 1px solid #ebccd1; padding: 15px; margin-bottom: 20px; border-radius: 4px; font-weight: bold; text-align: center; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>EDUC AI TalkBot Admin Panel</h1>
+        
+        <div class="security-warning">
+            Warning: This admin panel is currently unprotected. Please secure access via web server configuration (e.g., Basic Auth, IP restriction) or Cloudron access controls.
+        </div>
 
         <?php if (!empty($errorMessage)): ?>
             <p class="error"><?php echo htmlspecialchars($errorMessage); ?></p>
@@ -140,19 +124,11 @@ if ($isLoggedIn && $configRepo) {
             <p class="success"><?php echo htmlspecialchars($successMessage); ?></p>
         <?php endif; ?>
 
-        <?php if (!$isLoggedIn): ?>
-            <h2>Login</h2>
-            <form method="post">
-                <div class="form-group">
-                    <label for="password">Password:</label>
-                    <input type="password" id="password" name="password" required>
-                </div>
-                <input type="submit" value="Login">
-            </form>
-        <?php elseif ($configRepo): ?>
-            <div class="logout-link"><a href="?logout=1">Logout</a></div>
+        <?php // REMOVED LOGIN CHECK - Show form if configRepo is available ?>
+        <?php if ($configRepo): ?>
+            <?php // REMOVED LOGOUT LINK ?> 
             <h2>Configuration</h2>
-            <form method="post">
+            <form method="post" action="admin.php"> <?php // Ensure form posts to itself ?>
                 <div class="form-group">
                     <label for="system_prompt">System Prompt:</label>
                     <textarea id="system_prompt" name="system_prompt" required><?php echo htmlspecialchars($currentConfig['systemPrompt']); ?></textarea>
@@ -168,8 +144,8 @@ if ($isLoggedIn && $configRepo) {
                 <input type="submit" name="save_config" value="Save Configuration">
             </form>
         <?php else: ?>
-             <div class="logout-link"><a href="?logout=1">Logout</a></div>
-             <p class="error">Could not connect to the database to load configuration.</p>
+             <?php // Error message is already shown above if $configRepo failed to load ?>
+             <p>Configuration form cannot be displayed.</p>
         <?php endif; ?>
     </div>
 </body>
