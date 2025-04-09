@@ -8,6 +8,9 @@ session_start();
 require_once(__DIR__ . '/includes/env_loader.php');
 loadAdminEnv(); // Use the function from env_loader.php
 
+// Include Core classes
+require_once(__DIR__ . '/../src/Core/Environment.php'); // Load Environment class
+
 // Include database and auth helpers
 require_once(__DIR__ . '/../src/Database/Database.php');
 require_once(__DIR__ . '/includes/db.php'); // Initializes $db global or returns instance
