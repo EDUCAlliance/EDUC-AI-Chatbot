@@ -74,8 +74,20 @@ class Database {
 
         if ($count == 0) {
             // Settings table is empty, load from llm_config.json
-            $configPath = Environment::get('AI_CONFIG_FILE', 'llm_config.json');
-            if (file_exists($configPath)) {
+            // Prefer environment variable, otherwise construct path assuming public root
+            $configPath = Environment::get('AI_CONFIG_FILE');
+            if (!$configPath) {
+                // Construct path: Go up from src/Database to src/, then to root, then public/
+                $configPath = __DIR__ . '/../../public/llm_config.json'; 
+            } else {
+                 // Ensure the path from ENV is absolute or resolve relative to a known root if needed
+                // Assuming ENV variable provides a usable path directly for now
+            }
+            
+            // Normalize the path to handle potential .. or .
+            $configPath = realpath($configPath);
+
+            if ($configPath && file_exists($configPath)) { // Check if realpath resolved and file exists
                 $configContent = file_get_contents($configPath);
                 $config = json_decode($configContent, true);
 

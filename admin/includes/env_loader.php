@@ -1,8 +1,8 @@
 <?php
 
 function loadAdminEnv(): void {
-    // Hardcoded path as requested
-    $envPath = '../.env'; 
+    // Go three levels up from /admin/includes/ to reach the root /app/code/
+    $envPath = __DIR__ . '/../../../.env'; 
     
     // Check if already loaded
     if (getenv('ADMIN_ENV_LOADED')) {
