@@ -1,6 +1,7 @@
 <?php
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
+session_save_path('/app/code/public');
 session_start();
 
 // Load environment variables specifically for admin
