@@ -77,14 +77,14 @@ class Database {
             // Prefer environment variable, otherwise construct path assuming public root
             $configPath = Environment::get('AI_CONFIG_FILE');
             if (!$configPath) {
-                // Construct path: Go up from src/Database to src/, then to root, then public/
-                $configPath = __DIR__ . '/../../public/llm_config.json'; 
+                // Construct path: Go up two levels from src/Database to the public root
+                $configPath = __DIR__ . '/../../llm_config.json'; 
             } else {
                  // Ensure the path from ENV is absolute or resolve relative to a known root if needed
-                // Assuming ENV variable provides a usable path directly for now
+                 // Assuming ENV variable provides a usable path directly for now
             }
             
-            // Normalize the path to handle potential .. or .
+            // Normalize the path to handle potential .. or . and assign to $resolvedPath
             $resolvedPath = realpath($configPath);
 
             if ($resolvedPath && file_exists($resolvedPath)) { // Check if realpath resolved and file exists
