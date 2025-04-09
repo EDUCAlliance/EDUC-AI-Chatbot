@@ -2,7 +2,7 @@
 
 function loadAdminEnv(): void {
     // Hardcoded path as requested
-    $envPath = '../.env'; 
+    $envPath = '/app/code/.env'; 
     
     // Check if already loaded
     if (getenv('ADMIN_ENV_LOADED')) {
