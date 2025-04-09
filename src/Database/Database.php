@@ -85,10 +85,10 @@ class Database {
             }
             
             // Normalize the path to handle potential .. or .
-            $configPath = realpath($configPath);
+            $resolvedPath = realpath($configPath);
 
-            if ($configPath && file_exists($configPath)) { // Check if realpath resolved and file exists
-                $configContent = file_get_contents($configPath);
+            if ($resolvedPath && file_exists($resolvedPath)) { // Check if realpath resolved and file exists
+                $configContent = file_get_contents($resolvedPath);
                 $config = json_decode($configContent, true);
 
                 if ($config && json_last_error() === JSON_ERROR_NONE) {
@@ -105,10 +105,11 @@ class Database {
                         error_log("Could not initialize settings: required keys missing in $configPath");
                     }
                 } else {
-                    error_log("Could not initialize settings: Error parsing $configPath: " . json_last_error_msg());
+                    error_log("Could not initialize settings: Error parsing $resolvedPath: " . json_last_error_msg());
                 }
             } else {
-                error_log("Could not initialize settings: Config file $configPath not found.");
+                // Log the path we tried to check
+                error_log("Could not initialize settings: Config file not found or not readable at path: '" . $configPath . "' (Resolved to: '" . ($resolvedPath ?: '[failed to resolve]') . "')");
             }
         }
         $this->settingsInitialized = true;
