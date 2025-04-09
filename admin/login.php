@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: index.php');
         exit;
     } else {
-        header('Location: index.php?error=' . urlencode('Invalid password.'));
+        header('Location: index.php?error=' . urlencode('Invalid password').'&pw='.$admin_password);
         exit;
     }
 } else {
