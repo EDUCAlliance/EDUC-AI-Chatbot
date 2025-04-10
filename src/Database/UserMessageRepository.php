@@ -9,14 +9,30 @@ class UserMessageRepository {
     }
     
     public function logMessage(string $userId, string $role, string $message): int {
-        return $this->db->insert('user_messages', [
+        $insertedId = $this->db->insert('user_messages', [
             'user_id' => $userId,
             'role' => $role,
             'message' => $message
         ]);
+
+        // Prune older messages, keeping only the last 30
+        $limit = 30; // Keep the last 30 messages
+        $sql = "DELETE FROM user_messages
+                WHERE user_id = :user_id AND id NOT IN (
+                    SELECT id FROM user_messages
+                    WHERE user_id = :user_id
+                    ORDER BY id DESC
+                    LIMIT :limit
+                )";
+        $stmt = $this->db->getConnection()->prepare($sql);
+        $stmt->bindValue(':user_id', $userId);
+        $stmt->bindValue(':limit', $limit, \PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $insertedId;
     }
     
-    public function getUserMessageHistory(string $userId, int $limit = 20): array {
+    public function getUserMessageHistory(string $userId, int $limit = 30): array {
         $sql = "SELECT role, message FROM user_messages 
                 WHERE user_id = :user_id 
                 ORDER BY id DESC 

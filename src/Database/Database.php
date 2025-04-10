@@ -24,11 +24,6 @@ class Database {
     }
 
     private function initialize(): void {
-        // Drop old user_messages table if it exists (to change structure)
-        // Warning: This deletes existing chat history!
-        // Consider a more sophisticated migration strategy for production.
-        $this->connection->exec("DROP TABLE IF EXISTS user_messages");
-
         // Create NEW user_messages table with role and assistant_response
         $this->connection->exec("CREATE TABLE IF NOT EXISTS user_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
