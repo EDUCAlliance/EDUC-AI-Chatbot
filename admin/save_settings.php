@@ -20,8 +20,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $systemPrompt = $_POST['systemPrompt'] ?? '';
     $model = $_POST['model'] ?? '';
     $botMention = $_POST['botMention'] ?? '';
+    // Checkbox value is 'true' if checked, otherwise not present
+    $debugMode = isset($_POST['debugMode']) && $_POST['debugMode'] === 'true' ? 'true' : 'false';
 
-    // Basic validation
+    // Basic validation (no need to validate debugMode as it defaults)
     if (empty($systemPrompt) || empty($model) || empty($botMention)) {
         header('Location: index.php?error=' . urlencode('All fields are required.'));
         exit;
@@ -32,13 +34,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $db = $dbInstance->getConnection();
         $db->beginTransaction();
 
-        // Use REPLACE INTO (or equivalent INSERT OR REPLACE) for simplicity
-        // Assumes 'key' is a UNIQUE column in the settings table
-        $stmt = $db->prepare("REPLACE INTO settings (key, value) VALUES (:key, :value)");
-
-        $stmt->execute([':key' => 'systemPrompt', ':value' => $systemPrompt]);
-        $stmt->execute([':key' => 'model', ':value' => $model]);
-        $stmt->execute([':key' => 'botMention', ':value' => $botMention]);
+        // Use the saveSetting helper method
+        $dbInstance->saveSetting('systemPrompt', $systemPrompt);
+        $dbInstance->saveSetting('model', $model);
+        $dbInstance->saveSetting('botMention', $botMention);
+        $dbInstance->saveSetting('debug', $debugMode);
 
         $db->commit();
         header('Location: index.php?success=' . urlencode('Settings saved successfully.'));

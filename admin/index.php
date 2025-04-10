@@ -51,12 +51,12 @@ if (!is_logged_in()) {
 // --- If logged in, display settings ---
 
 // Fetch current settings
-$settingsStmt = $dbInstance->query("SELECT key, value FROM settings");
-$settings = $settingsStmt->fetchAll(\PDO::FETCH_KEY_PAIR);
+$settings = $dbInstance->getAllSettings(); // Use helper method
 
 $systemPrompt = $settings['systemPrompt'] ?? '';
 $model = $settings['model'] ?? '';
 $botMention = $settings['botMention'] ?? '';
+$debugMode = strtolower($settings['debug'] ?? 'false') === 'true';
 
 ?>
 <!DOCTYPE html>
@@ -91,6 +91,11 @@ $botMention = $settings['botMention'] ?? '';
             <div class="form-group">
                 <label for="botMention">Bot Mention Name:</label>
                 <input type="text" id="botMention" name="botMention" value="<?php echo htmlspecialchars($botMention); ?>" required>
+            </div>
+            <div class="form-group">
+                <label for="debugMode">Debug Mode:</label>
+                <input type="checkbox" id="debugMode" name="debugMode" value="true" <?php echo $debugMode ? 'checked' : ''; ?>>
+                <span class="hint">Overrides DEBUG environment variable. Displays extra info in chat responses.</span>
             </div>
             <button type="submit">Save Settings</button>
         </form>

@@ -65,7 +65,9 @@ try {
     
     // Check if we should use RAG
     $useRag = strtolower(Environment::get('USE_RAG', 'true')) === 'true';
-    $debug = strtolower(Environment::get('DEBUG', 'false')) === 'true';
+    // Get debug mode setting from database, default to false
+    $debugSetting = $db->getSetting('debug', 'false');
+    $debug = strtolower($debugSetting) === 'true';
     $retriever = null;
     
     if ($useRag) {

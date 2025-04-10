@@ -108,6 +108,15 @@ class Database {
                 error_log("Could not initialize settings: Config file not found or not readable at path: '" . $configPath . "' (Resolved to: '" . ($resolvedPath ?: '[failed to resolve]') . "')");
             }
         }
+
+        // Ensure 'debug' setting exists, default to 'false'
+        $stmt = $this->connection->prepare("SELECT 1 FROM settings WHERE key = 'debug'");
+        $stmt->execute();
+        if ($stmt->fetchColumn() === false) {
+            $this->saveSetting('debug', 'false');
+            error_log("Initialized default setting 'debug' to 'false'");
+        }
+
         $this->settingsInitialized = true;
     }
 
@@ -162,9 +171,16 @@ class Database {
 
     // Method to get a specific setting
     public function getSetting(string $key, $default = null): ?string {
-        $stmt = $this->query("SELECT value FROM settings WHERE key = :key", [':key' => $key]);
-        $result = $stmt->fetch(\PDO::FETCH_ASSOC);
-        return $result ? $result['value'] : $default;
+        $stmt = $this->connection->prepare("SELECT value FROM settings WHERE key = :key");
+        $stmt->execute([':key' => $key]);
+        $value = $stmt->fetchColumn();
+        return $value === false ? $default : $value;
+    }
+
+    // Method to get all settings
+    public function getAllSettings(): array {
+        $stmt = $this->connection->query("SELECT key, value FROM settings");
+        return $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Returns an associative array [key => value]
     }
 
     // Method to save/update a specific setting
@@ -172,11 +188,5 @@ class Database {
         // Using REPLACE INTO for simplicity (requires key to be PRIMARY KEY or UNIQUE)
         $stmt = $this->connection->prepare("REPLACE INTO settings (key, value) VALUES (:key, :value)");
         $stmt->execute([':key' => $key, ':value' => $value]);
-    }
-
-    // Method to get all settings
-    public function getAllSettings(): array {
-        $stmt = $this->query("SELECT key, value FROM settings");
-        return $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Returns an associative array [key => value]
     }
 } 
