@@ -95,7 +95,7 @@ $debugMode = strtolower($settings['debug'] ?? 'false') === 'true';
             <div class="form-group">
                 <label for="debugMode">Debug Mode:</label>
                 <input type="checkbox" id="debugMode" name="debugMode" value="true" <?php echo $debugMode ? 'checked' : ''; ?>>
-                <span class="hint">Overrides DEBUG environment variable. Displays extra info in chat responses.</span>
+                <span class="hint">Displays extra info in chat responses.</span>
             </div>
             <button type="submit">Save Settings</button>
         </form>
