@@ -24,13 +24,13 @@ ini_set('memory_limit', '1G');
 gc_enable();
 
 // Direct includes instead of using Composer autoloader
-require_once dirname(__DIR__) . '/src/Core/Environment.php';
-require_once dirname(__DIR__) . '/src/Core/Config.php';
-require_once dirname(__DIR__) . '/src/API/LLMClient.php';
-require_once dirname(__DIR__) . '/src/Database/Database.php';
-require_once dirname(__DIR__) . '/src/Database/EmbeddingRepository.php';
-require_once dirname(__DIR__) . '/src/RAG/DataProcessor.php';
-require_once dirname(__DIR__) . '/src/RAG/DocumentProcessor.php';
+require_once __DIR__ . '/src/Core/Environment.php';
+require_once __DIR__ . '/src/Core/Config.php';
+require_once __DIR__ . '/src/API/LLMClient.php';
+require_once __DIR__ . '/src/Database/Database.php';
+require_once __DIR__ . '/src/Database/EmbeddingRepository.php';
+require_once __DIR__ . '/src/RAG/DataProcessor.php';
+require_once __DIR__ . '/src/RAG/DocumentProcessor.php';
 
 // Namespace imports
 use EDUC\Core\Environment;
