@@ -1,25 +1,18 @@
 <?php
 namespace EDUC\RAG;
 
-use EDUC\Core\Config;
 use EDUC\API\LLMClient;
 use EDUC\Database\Database;
 use EDUC\Database\EmbeddingRepository;
 
 class DataProcessor {
-    private Config $config;
     private LLMClient $llmClient;
     private Database $db;
     private EmbeddingRepository $embeddingRepository;
     private DocumentProcessor $documentProcessor;
     private string $dataDir;
-    private int $chunkSize;
-    private int $chunkOverlap;
-    private int $batchSize;
-    private int $rateLimit;
     
     public function __construct(
-        Config $config,
         LLMClient $llmClient,
         Database $db,
         string $dataDir,
@@ -28,7 +21,6 @@ class DataProcessor {
         int $batchSize = 10,
         int $rateLimit = 30
     ) {
-        $this->config = $config;
         $this->llmClient = $llmClient;
         $this->db = $db;
         $this->dataDir = rtrim($dataDir, '/');
