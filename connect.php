@@ -102,8 +102,9 @@ try {
         exit;
     }
     
-    // Process the user message
-    $llmResponse = $chatbot->processUserMessage($message, $id_of_user, $name_of_user);
+        // Process the user message
+        $currentTime = date('c');
+        $llmResponse = $chatbot->processUserMessage($message, $id_of_user, $name_of_user, $currentTime);
     
 } catch (\Exception $e) {
     error_log("Error initializing components or processing message: " . $e->getMessage() . " Trace: " . $e->getTraceAsString());

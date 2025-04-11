@@ -26,7 +26,7 @@ class Chatbot {
         $this->debug = $debug;
     }
     
-    public function processUserMessage(string $message, string $userId, string $userName): string {
+    public function processUserMessage(string $message, string $userId, string $userName, string $currentTime): string {
         // Log the user message with role 'user'
         $this->messageRepository->logMessage($userId, 'user', $message);
         
@@ -36,7 +36,7 @@ class Chatbot {
         $model = $settings['model'] ?? 'default-model'; // Add a fallback
         
         // Inject user info (name only, history is handled separately)
-        $injectedSystemPrompt = "User Name: $userName\n" . $systemPrompt; // Simplified injection
+        $injectedSystemPrompt = "Current Time: $currentTime\nUser Name: $userName\n" . $systemPrompt; // Inject current time and user name
         
         // Apply RAG if available
         $retrievalInfo = null;
