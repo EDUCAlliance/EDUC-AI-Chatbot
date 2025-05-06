@@ -28,11 +28,34 @@ class Database {
         $this->connection->exec("CREATE TABLE IF NOT EXISTS user_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id TEXT NOT NULL,
-            target_id TEXT NOT NULL, -- Added target_id
+            target_id TEXT NOT NULL, -- This line defines it for new tables
             role TEXT NOT NULL,  -- 'user' or 'assistant'
             message TEXT NOT NULL,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )");
+
+        // Check and add target_id column to user_messages if it doesn't exist (for existing tables)
+        $stmt = $this->connection->query("PRAGMA table_info(user_messages)");
+        $columns = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        $targetIdColumnExists = false;
+        foreach ($columns as $column) {
+            if ($column['name'] === 'target_id') {
+                $targetIdColumnExists = true;
+                break;
+            }
+        }
+
+        if (!$targetIdColumnExists) {
+            try {
+                // Add the column with a default value to avoid issues with existing NOT NULL constraints
+                $this->connection->exec("ALTER TABLE user_messages ADD COLUMN target_id TEXT NOT NULL DEFAULT 'unknown_target'");
+                error_log("INFO: Added missing 'target_id' column to 'user_messages' table with default 'unknown_target'.");
+            } catch (\PDOException $e) {
+                error_log("ERROR: Failed to add 'target_id' column to 'user_messages' table: " . $e->getMessage());
+                // Rethrow or handle as critical error, as subsequent operations might depend on this column
+                throw $e;
+            }
+        }
 
         // Add index for faster queries on user_id and target_id
         $this->connection->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_user_target ON user_messages (user_id, target_id)");
