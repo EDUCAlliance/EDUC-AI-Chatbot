@@ -28,10 +28,15 @@ class Database {
         $this->connection->exec("CREATE TABLE IF NOT EXISTS user_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id TEXT NOT NULL,
+            target_id TEXT NOT NULL, -- Added target_id
             role TEXT NOT NULL,  -- 'user' or 'assistant'
             message TEXT NOT NULL,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )");
+
+        // Add index for faster queries on user_id and target_id
+        $this->connection->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_user_target ON user_messages (user_id, target_id)");
+        $this->connection->exec("CREATE INDEX IF NOT EXISTS idx_user_messages_target ON user_messages (target_id)");
 
         // Create embeddings table if it doesn't exist
         $this->connection->exec("CREATE TABLE IF NOT EXISTS embeddings (
@@ -57,6 +62,17 @@ class Database {
         $this->connection->exec("CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT
+        )");
+
+        // Create chat_configs table
+        $this->connection->exec("CREATE TABLE IF NOT EXISTS chat_configs (
+            target_id TEXT PRIMARY KEY,
+            is_group_chat BOOLEAN DEFAULT FALSE,
+            requires_mention BOOLEAN DEFAULT TRUE,
+            onboarding_step INTEGER DEFAULT 0, -- 0:new, 1:asked_mention, 2:asked_type, 3:asking_questions, 4:complete
+            current_question_index INTEGER DEFAULT 0,
+            onboarding_answers TEXT, -- JSON
+            last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
         )");
     }
 
@@ -116,6 +132,21 @@ class Database {
             $this->saveSetting('debug', 'false');
             error_log("Initialized default setting 'debug' to 'false'");
         }
+        
+        // Ensure onboarding questions settings exist, default to empty JSON array '[]'
+        $defaultOnboardingQuestions = '[]';
+        if ($this->getSetting('user_onboarding_questions') === null) {
+            $this->saveSetting('user_onboarding_questions', $defaultOnboardingQuestions);
+            error_log("Initialized default setting 'user_onboarding_questions'");
+        }
+        if ($this->getSetting('group_onboarding_questions') === null) {
+            $this->saveSetting('group_onboarding_questions', $defaultOnboardingQuestions);
+            error_log("Initialized default setting 'group_onboarding_questions'");
+        }
+        
+        // Remove legacy welcomeMessage if it exists
+        $stmt = $this->connection->prepare("DELETE FROM settings WHERE key = 'welcomeMessage'");
+        $stmt->execute();
 
         $this->settingsInitialized = true;
     }
@@ -188,5 +219,41 @@ class Database {
         // Using REPLACE INTO for simplicity (requires key to be PRIMARY KEY or UNIQUE)
         $stmt = $this->connection->prepare("REPLACE INTO settings (key, value) VALUES (:key, :value)");
         $stmt->execute([':key' => $key, ':value' => $value]);
+    }
+
+    // Methods for chat_configs table
+    public function getChatConfig(string $targetId): ?array {
+        $stmt = $this->connection->prepare("SELECT * FROM chat_configs WHERE target_id = :target_id");
+        $stmt->execute([':target_id' => $targetId]);
+        $config = $stmt->fetch(\PDO::FETCH_ASSOC);
+        return $config ?: null;
+    }
+
+    public function saveChatConfig(string $targetId, array $configData): void {
+        $configData['target_id'] = $targetId; // Ensure target_id is in the data
+        $configData['last_updated'] = date('Y-m-d H:i:s');
+
+        $columns = [];
+        $placeholders = [];
+        $updateSet = [];
+        foreach ($configData as $key => $value) {
+            $columns[] = $key;
+            $placeholders[] = ":$key";
+            if ($key !== 'target_id') { // Don't include primary key in update set
+                $updateSet[] = "$key = :$key";
+            }
+        }
+
+        $sql = "INSERT INTO chat_configs (" . implode(', ', $columns) . ") 
+                VALUES (" . implode(', ', $placeholders) . ")
+                ON CONFLICT(target_id) DO UPDATE SET " . implode(', ', $updateSet);
+        
+        $stmt = $this->connection->prepare($sql);
+        $stmt->execute($configData);
+    }
+
+    public function deleteChatConfig(string $targetId): void {
+        $stmt = $this->connection->prepare("DELETE FROM chat_configs WHERE target_id = :target_id");
+        $stmt->execute([':target_id' => $targetId]);
     }
 } 

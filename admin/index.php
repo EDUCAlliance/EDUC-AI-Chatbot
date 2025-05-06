@@ -57,7 +57,12 @@ $systemPrompt = $settings['systemPrompt'] ?? '';
 $model = $settings['model'] ?? '';
 $botMention = $settings['botMention'] ?? '';
 $debugMode = strtolower($settings['debug'] ?? 'false') === 'true';
-$welcomeMessage = $settings['welcomeMessage'] ?? 'Welcome back! How can I help you today?';
+$userOnboardingQuestions = $settings['user_onboarding_questions'] ?? '[]';
+$groupOnboardingQuestions = $settings['group_onboarding_questions'] ?? '[]';
+
+// Decode JSON question strings to comma-separated strings for display
+$userOnboardingQuestionsDisplay = implode(', ', json_decode($userOnboardingQuestions, true) ?: []);
+$groupOnboardingQuestionsDisplay = implode(', ', json_decode($groupOnboardingQuestions, true) ?: []);
 
 ?>
 <!DOCTYPE html>
@@ -94,9 +99,14 @@ $welcomeMessage = $settings['welcomeMessage'] ?? 'Welcome back! How can I help y
                 <input type="text" id="botMention" name="botMention" value="<?php echo htmlspecialchars($botMention); ?>" required>
             </div>
             <div class="form-group">
-                <label for="welcomeMessage">Welcome Message (for inactive chats):</label>
-                <textarea id="welcomeMessage" name="welcomeMessage" rows="3" required><?php echo htmlspecialchars($welcomeMessage); ?></textarea>
-                <span class="hint">This message is sent if the last chat message is older than 24 hours.</span>
+                <label for="userOnboardingQuestions">User Onboarding Questions (comma-separated):</label>
+                <textarea id="userOnboardingQuestions" name="userOnboardingQuestions" rows="3"><?php echo htmlspecialchars($userOnboardingQuestionsDisplay); ?></textarea>
+                <span class="hint">Questions to ask individual users during onboarding. Example: What is your primary role?, What topics are you most interested in?</span>
+            </div>
+            <div class="form-group">
+                <label for="groupOnboardingQuestions">Group Onboarding Questions (comma-separated):</label>
+                <textarea id="groupOnboardingQuestions" name="groupOnboardingQuestions" rows="3"><?php echo htmlspecialchars($groupOnboardingQuestionsDisplay); ?></textarea>
+                <span class="hint">Questions to ask in group chats during onboarding. Example: What is the main purpose of this group?, Are there specific projects we should focus on?</span>
             </div>
             <div class="form-group">
                 <label for="debugMode">Debug Mode:</label>

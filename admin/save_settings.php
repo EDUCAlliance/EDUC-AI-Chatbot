@@ -22,6 +22,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $botMention = $_POST['botMention'] ?? '';
     // Checkbox value is 'true' if checked, otherwise not present
     $debugMode = isset($_POST['debugMode']) && $_POST['debugMode'] === 'true' ? 'true' : 'false';
+    // $welcomeMessage = $_POST['welcomeMessage'] ?? ''; // Removed welcome message
+
+    // Process onboarding questions: convert comma-separated string to JSON array
+    $userQuestionsRaw = $_POST['userOnboardingQuestions'] ?? '';
+    $userQuestionsArray = !empty(trim($userQuestionsRaw)) ? array_map('trim', explode(',', $userQuestionsRaw)) : [];
+    $userOnboardingQuestionsJson = json_encode($userQuestionsArray);
+
+    $groupQuestionsRaw = $_POST['groupOnboardingQuestions'] ?? '';
+    $groupQuestionsArray = !empty(trim($groupQuestionsRaw)) ? array_map('trim', explode(',', $groupQuestionsRaw)) : [];
+    $groupOnboardingQuestionsJson = json_encode($groupQuestionsArray);
 
     // Basic validation (no need to validate debugMode as it defaults)
     if (empty($systemPrompt) || empty($model) || empty($botMention)) {
@@ -39,6 +49,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $dbInstance->saveSetting('model', $model);
         $dbInstance->saveSetting('botMention', $botMention);
         $dbInstance->saveSetting('debug', $debugMode);
+        // $dbInstance->saveSetting('welcomeMessage', $welcomeMessage); // Removed welcome message
+        $dbInstance->saveSetting('user_onboarding_questions', $userOnboardingQuestionsJson);
+        $dbInstance->saveSetting('group_onboarding_questions', $groupOnboardingQuestionsJson);
 
         $db->commit();
         header('Location: index.php?success=' . urlencode('Settings saved successfully.'));

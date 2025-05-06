@@ -49,6 +49,7 @@ if (!hash_equals($generatedDigest, strtolower($signature))) {
 $message = $data['object']['content'];
 $name_of_user = $data['actor']['name'];
 $id_of_user = $data['actor']['id'];
+$target_id = $data['target']['id'];
 
 // Initialize components
 try {
@@ -104,7 +105,7 @@ try {
     
         // Process the user message
         $currentTime = date('c');
-        $llmResponse = $chatbot->processUserMessage($message, $id_of_user, $name_of_user, $currentTime);
+        $llmResponse = $chatbot->processUserMessage($message, $id_of_user, $name_of_user, $target_id, $currentTime);
     
 } catch (\Exception $e) {
     error_log("Error initializing components or processing message: " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
