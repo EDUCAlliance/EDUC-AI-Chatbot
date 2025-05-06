@@ -33,7 +33,7 @@ class UserMessageRepository {
     }
     
     public function getUserMessageHistory(string $userId, int $limit = 30): array {
-        $sql = "SELECT role, message FROM user_messages 
+        $sql = "SELECT role, message, timestamp FROM user_messages 
                 WHERE user_id = :user_id 
                 ORDER BY id DESC 
                 LIMIT :limit";
@@ -49,7 +49,8 @@ class UserMessageRepository {
         foreach (array_reverse($messages) as $msg) {
             $formattedHistory[] = [
                 'role' => $msg['role'],
-                'content' => $msg['message']
+                'content' => $msg['message'],
+                'timestamp' => $msg['timestamp']
             ];
         }
         return $formattedHistory;
