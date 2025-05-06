@@ -104,9 +104,9 @@ class Chatbot {
                     break;
                 case 1: // Process mention requirement & ask about chat type (single/group)
                     $answer = strtolower(trim($message));
-                    if ($answer === 'every') {
+                    if (str_contains($answer, 'every')) {
                         $chatConfig['requires_mention'] = false;
-                    } elseif ($answer === 'mentioned') {
+                    } elseif (str_contains($answer, 'mentioned')) {
                         $chatConfig['requires_mention'] = true;
                     } else {
                         $response = "Sorry, I didn't understand that. Please reply with 'every' or 'mentioned'.";
@@ -120,9 +120,9 @@ class Chatbot {
                     break;
                 case 2: // Process chat type & start specific questions
                     $answer = strtolower(trim($message));
-                    if ($answer === 'one-on-one') {
+                    if (str_contains($answer, 'one-on-one')) {
                         $chatConfig['is_group_chat'] = false;
-                    } elseif ($answer === 'group') {
+                    } elseif (str_contains($answer, 'group')) {
                         $chatConfig['is_group_chat'] = true;
                     } else {
                         $response = "Sorry, I didn't understand that. Please reply with 'one-on-one' or 'group'.";
