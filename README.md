@@ -110,10 +110,12 @@ EMBEDDING_API_ENDPOINT=https://chat-ai.academiccloud.de/v1/embeddings # Embeddin
     {
       "model": "meta-llama-3.1-8b-instruct",
       "botMention": "AI Assistant",
-      "systemPrompt": "You are a helpful AI assistant for the EDUC project."
+      "systemPrompt": "You are a helpful AI assistant for the EDUC project.",
+      "welcomeMessage": "Welcome to the EDUC AI TalkBot! I'm here to help you with your questions."
     }
     ```
     *   Place this file in the location specified by `AI_CONFIG_FILE` in your `.env` (or `/app/code/public/llm_config.json` if `AI_CONFIG_FILE` is not set).
+    *   The `llm_config.json` can also optionally include a `welcomeMessage` field.
     *   **You can safely remove `llm_config.json` after the settings appear in the admin panel.**
 
 5.  **Set Up Web Server Permissions**: Ensure your web server user (e.g., `www-data`, `apache`) has write permissions for the directory containing your SQLite database.
@@ -130,14 +132,14 @@ EMBEDDING_API_ENDPOINT=https://chat-ai.academiccloud.de/v1/embeddings # Embeddin
 6.  **Access the Admin Panel**:
     *   Navigate to `https://yourdomain.com/path/to/admin/` (where `admin/` is located in your web root).
     *   Log in using the `ADMIN_PASSWORD` set in your `.env` file (or `BOT_TOKEN` if `ADMIN_PASSWORD` was left empty).
-    *   Configure the **System Prompt**, **AI Model**, **Bot Mention Name**, and **Debug Mode**. These settings are saved directly to the database.
+    *   Configure the **System Prompt**, **AI Model**, **Bot Mention Name**, **Welcome Message**, and **Debug Mode**. These settings are saved directly to the database.
 
 ### Database Setup
 
 The SQLite database (path defined by `DB_PATH` in `.env`) will be automatically created and initialized on the first run of `connect.php` or access to the admin panel.
 
 Key Tables:
--   `settings`: Stores configuration managed via the admin panel (System Prompt, Model, Bot Mention, Debug Mode). Initial values might be populated from `llm_config.json` if the table is empty and the file exists (see Installation Step 4).
+-   `settings`: Stores configuration managed via the admin panel (System Prompt, Model, Bot Mention, Debug Mode, Welcome Message). Initial values might be populated from `llm_config.json` if the table is empty and the file exists (see Installation Step 4).
 -   `user_messages`: Stores chat history (role, message, timestamp).
 -   `embeddings`: Stores document embeddings for RAG.
 -   `documents`: Stores metadata about ingested documents.
@@ -217,6 +219,7 @@ The Talkbot has the following features:
     - AI Model name
     - Bot Mention Name (how users trigger the bot in chat)
     - Debug Mode toggle (overrides `.env` setting, adds debug info to responses)
+    - Welcome Message (sent if the last chat message is older than 24 hours)
 - Connection to LLM APIs (e.g., GWDG Chat-AI).
 - Persistent user history tracking via SQLite
 - Retrieval Augmented Generation for context-aware responses

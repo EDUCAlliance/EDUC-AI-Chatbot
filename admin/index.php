@@ -57,6 +57,7 @@ $systemPrompt = $settings['systemPrompt'] ?? '';
 $model = $settings['model'] ?? '';
 $botMention = $settings['botMention'] ?? '';
 $debugMode = strtolower($settings['debug'] ?? 'false') === 'true';
+$welcomeMessage = $settings['welcomeMessage'] ?? 'Welcome back! How can I help you today?';
 
 ?>
 <!DOCTYPE html>
@@ -91,6 +92,11 @@ $debugMode = strtolower($settings['debug'] ?? 'false') === 'true';
             <div class="form-group">
                 <label for="botMention">Bot Mention Name:</label>
                 <input type="text" id="botMention" name="botMention" value="<?php echo htmlspecialchars($botMention); ?>" required>
+            </div>
+            <div class="form-group">
+                <label for="welcomeMessage">Welcome Message (for inactive chats):</label>
+                <textarea id="welcomeMessage" name="welcomeMessage" rows="3" required><?php echo htmlspecialchars($welcomeMessage); ?></textarea>
+                <span class="hint">This message is sent if the last chat message is older than 24 hours.</span>
             </div>
             <div class="form-group">
                 <label for="debugMode">Debug Mode:</label>

@@ -12,6 +12,7 @@ class Chatbot {
     private UserMessageRepository $messageRepository;
     private ?Retriever $retriever;
     private bool $debug;
+    private const MESSAGE_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours
     
     public function __construct(
         LLMClient $llmClient,
@@ -34,6 +35,7 @@ class Chatbot {
         $settings = $this->db->getAllSettings();
         $systemPrompt = $settings['systemPrompt'] ?? 'Default fallback system prompt.'; // Add a fallback
         $model = $settings['model'] ?? 'default-model'; // Add a fallback
+        $welcomeMessageSetting = $settings['welcomeMessage'] ?? 'Welcome back! How can I help you?';
         
         // Inject user info (name only, history is handled separately)
         $injectedSystemPrompt = "Current Time: $currentTime\nUser Name: $userName\n" . $systemPrompt; // Inject current time and user name
@@ -64,6 +66,34 @@ class Chatbot {
         // Get formatted message history from the repository
         $history = $this->messageRepository->getUserMessageHistory($userId); // Already formatted with roles
         
+        // Check if welcome message should be sent
+        $shouldSendWelcomeMessage = false;
+        if (!empty($history)) {
+            $lastMessage = end($history);
+            if (isset($lastMessage['timestamp'])) {
+                $lastMessageTimestamp = strtotime($lastMessage['timestamp']);
+                if ((time() - $lastMessageTimestamp) > self::MESSAGE_EXPIRY_SECONDS) {
+                    $shouldSendWelcomeMessage = true;
+                }
+            }
+        } else {
+            // No history, so it's the first message, consider sending welcome
+            // Or handle as new conversation, typically not needing a specific 'welcome back'
+            // For now, let's assume a welcome is good if there's NO history either,
+            // but the configured welcome message might need to be more generic then.
+            // $shouldSendWelcomeMessage = true; // Uncomment if welcome desired for brand new chats too
+        }
+
+        $initialBotResponse = "";
+        if ($shouldSendWelcomeMessage && !empty($welcomeMessageSetting)) {
+            $initialBotResponse = $welcomeMessageSetting . "\n\n";
+            // Log this implicitly sent welcome message as an assistant message
+            // So it appears in history for future calls and for the user to see.
+            $this->messageRepository->logMessage($userId, 'assistant', $welcomeMessageSetting);
+             // Re-fetch history if we just logged the welcome message to include it
+            $history = $this->messageRepository->getUserMessageHistory($userId);
+        }
+
         // Prepare messages for API call
         $messages = array_merge(
             [
@@ -87,12 +117,15 @@ class Chatbot {
       if (isset($response['choices'][0]['message']['content'])) {
             $responseText = $response['choices'][0]['message']['content'];
             
-            // Log the assistant's response
-            $this->messageRepository->logMessage($userId, 'assistant', $responseText);
+            // Prepend the initial bot response (welcome message) if any
+            $finalResponseText = $initialBotResponse . $responseText;
+
+            // Log the assistant's response (the part from LLM)
+            $this->messageRepository->logMessage($userId, 'assistant', $responseText); // Log only LLM part, welcome already logged
             
             // Add debug information if requested
             if ($this->debug && $retrievalInfo !== null) {
-                $responseText .= $this->formatRetrievalDebugInfo($retrievalInfo);
+                $finalResponseText .= $this->formatRetrievalDebugInfo($retrievalInfo);
             }
             
             // Add detailed debug information about the retrieval process
@@ -106,10 +139,10 @@ class Chatbot {
                 $debugInfo .= "\nSystem Prompt Length: " . strlen($injectedSystemPrompt) . " characters";
                 $debugInfo .= "\nModel Used: $model"; // Add model info
                 $debugInfo .= "\nMessage History Sent (Count: " . count($history) . "): " . json_encode($history, JSON_PRETTY_PRINT); // Log history
-                return $responseText . $debugInfo;
+                return $finalResponseText . $debugInfo;
             }
             
-            return $responseText;
+            return $finalResponseText;
         }
         
         // Handle error
