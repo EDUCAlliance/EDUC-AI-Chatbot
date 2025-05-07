@@ -31,8 +31,15 @@ class Chatbot {
     }
     
     public function processUserMessage(string $message, string $userId, string $userName, string $targetId, string $currentTime): string {
-        // Log the user message with role 'user'
-        $this->messageRepository->logMessage($userId, $targetId, 'user', $message);
+        // Parse the incoming message, which might be a JSON string from Nextcloud Talk
+        $actualUserMessageText = $message; // Default to original message string
+        $decodedContent = json_decode($message, true);
+        if (json_last_error() === JSON_ERROR_NONE && isset($decodedContent['message'])) {
+            $actualUserMessageText = $decodedContent['message'];
+        } // It's important that $actualUserMessageText now holds the plain text.
+
+        // Log the user message (the actual text) with role 'user'
+        $this->messageRepository->logMessage($userId, $targetId, 'user', $actualUserMessageText);
         
         // Fetch chat configuration for this target_id
         $chatConfig = $this->db->getChatConfig($targetId);
@@ -52,7 +59,7 @@ class Chatbot {
         $onboardingAnswers = json_decode($chatConfig['onboarding_answers'], true) ?: [];
 
         // Handle /reset command
-        if (strtolower(trim($message)) === '/reset') {
+        if (strtolower(trim($actualUserMessageText)) === '/reset') {
             // Check if already awaiting confirmation to prevent re-triggering if user spams /reset
             if ($chatConfig['onboarding_step'] !== self::RESET_CONFIRMATION_AWAIT_STEP) {
                 $chatConfig['onboarding_step'] = self::RESET_CONFIRMATION_AWAIT_STEP; // Set to awaiting confirmation
@@ -69,7 +76,7 @@ class Chatbot {
         }
 
         if ($chatConfig['onboarding_step'] === self::RESET_CONFIRMATION_AWAIT_STEP) { // Awaiting reset confirmation
-            if (strtoupper(trim($message)) === 'YES') {
+            if (strtoupper(trim($actualUserMessageText)) === 'YES') {
                 // Perform reset
                 $this->messageRepository->deleteMessagesByTarget($targetId);
                 $this->db->deleteChatConfig($targetId); // Deletes the config, will be recreated on next message
@@ -110,7 +117,7 @@ class Chatbot {
                     $chatConfig['onboarding_step'] = 1;
                     break;
                 case 1: // Process mention requirement & ask about chat type (single/group)
-                    $answer = strtolower(trim($message));
+                    $answer = strtolower(trim($actualUserMessageText));
                     if (str_contains($answer, 'every')) {
                         $chatConfig['requires_mention'] = false;
                     } elseif (str_contains($answer, 'mentioned')) {
@@ -126,7 +133,7 @@ class Chatbot {
                     $chatConfig['onboarding_step'] = 2;
                     break;
                 case 2: // Process chat type & start specific questions
-                    $answer = strtolower(trim($message));
+                    $answer = strtolower(trim($actualUserMessageText));
                     if (str_contains($answer, 'one-on-one')) {
                         $chatConfig['is_group_chat'] = false;
                     } elseif (str_contains($answer, 'group')) {
@@ -147,7 +154,7 @@ class Chatbot {
 
                     if ($questionIndex > 0 && $questionIndex <= count($questions)) {
                         // Save answer to the previous question
-                        $onboardingAnswers[$questions[$questionIndex - 1]] = $message; // Store question as key, answer as value
+                        $onboardingAnswers[$questions[$questionIndex - 1]] = $actualUserMessageText; // Store question as key, answer as value
                         $chatConfig['onboarding_answers'] = json_encode($onboardingAnswers);
                     }
 
@@ -171,7 +178,7 @@ class Chatbot {
         // This check should not happen during onboarding itself.
         if ($chatConfig['onboarding_step'] === self::ONBOARDING_COMPLETED_STEP) {
             $botMentionSetting = $this->db->getSetting('botMention', 'AI'); // Fallback bot name
-            if ($chatConfig['requires_mention'] && stripos($message, '@' . $botMentionSetting) === false) {
+            if ($chatConfig['requires_mention'] && stripos($actualUserMessageText, '@' . $botMentionSetting) === false) {
                 error_log("Bot not mentioned and mention is required for completed chat. Exiting for targetId: {$targetId}");
                 // Consider returning a specific silent response or just exiting.
                 // For now, we exit as the original connect.php did.
@@ -198,8 +205,8 @@ class Chatbot {
         $retrievalInfo = null;
         $retrievalResult = null;
         if ($this->retriever != null) {
-            error_log("DEBUG - Starting RAG retrieval for message: " . substr($message, 0, 100));
-            $retrievalResult = $this->retriever->retrieveRelevantContent($message);
+            error_log("DEBUG - Starting RAG retrieval for message: " . substr($actualUserMessageText, 0, 100));
+            $retrievalResult = $this->retriever->retrieveRelevantContent($actualUserMessageText);
             
             if (!$retrievalResult['success']) {
                 error_log("DEBUG - RAG retrieval failed: " . json_encode($retrievalResult));
@@ -209,7 +216,7 @@ class Chatbot {
             }
             
             if ($retrievalResult['success'] && !empty($retrievalResult['matches'])) {
-                $injectedSystemPrompt = $this->retriever->augmentPrompt($injectedSystemPrompt, $message, $retrievalResult);
+                $injectedSystemPrompt = $this->retriever->augmentPrompt($injectedSystemPrompt, $actualUserMessageText, $retrievalResult);
                 $retrievalInfo = $retrievalResult;
                 error_log("DEBUG - System prompt augmented with RAG content");
             } else {
