@@ -14,7 +14,8 @@ class Chatbot {
     private bool $debug;
     private const MESSAGE_EXPIRY_SECONDS = 24 * 60 * 60; // 24 hours - This is no longer used for welcome messages
     private const ONBOARDING_COMPLETED_STEP = 4;
-    private const ONBOARDING_RESET_CONFIRMATION_MESSAGE = "Are you sure you want to reset your configuration and message history for this chat? Type YES to confirm or anything else to cancel.";
+    private const RESET_CONFIRMATION_AWAIT_STEP = -1; // Using a named constant
+    private const ONBOARDING_RESET_CONFIRMATION_MESSAGE = "Are you sure you want to reset all configurations and message history for this chat? This cannot be undone. Please answer with \"YES\" to confirm, or anything else to cancel.";
     
     public function __construct(
         LLMClient $llmClient,
@@ -52,36 +53,42 @@ class Chatbot {
 
         // Handle /reset command
         if (strtolower(trim($message)) === '/reset') {
-            if ($chatConfig['onboarding_step'] === -1) { // -1 indicates awaiting reset confirmation
-                // This state should ideally not be hit if UI prevents sending new messages during confirmation
-                // but as a fallback, we reset the confirmation state.
-                $chatConfig['onboarding_step'] = $isNewChatConfig ? 0 : self::ONBOARDING_COMPLETED_STEP; // Revert to previous state or new
+            // Check if already awaiting confirmation to prevent re-triggering if user spams /reset
+            if ($chatConfig['onboarding_step'] !== self::RESET_CONFIRMATION_AWAIT_STEP) {
+                $chatConfig['onboarding_step'] = self::RESET_CONFIRMATION_AWAIT_STEP; // Set to awaiting confirmation
                 $this->db->saveChatConfig($targetId, $chatConfig);
-                $response = "Reset cancelled. Let's continue.";
+                $response = self::ONBOARDING_RESET_CONFIRMATION_MESSAGE;
+                $this->messageRepository->logMessage($userId, $targetId, 'assistant', $response);
+                return $response;
+            } else {
+                // Already awaiting confirmation, just re-send the confirmation message or a small note
+                $response = "Still awaiting confirmation for reset. " . self::ONBOARDING_RESET_CONFIRMATION_MESSAGE;
                 $this->messageRepository->logMessage($userId, $targetId, 'assistant', $response);
                 return $response;
             }
-            $chatConfig['onboarding_step'] = -1; // Set to awaiting confirmation
-            $this->db->saveChatConfig($targetId, $chatConfig);
-            $response = self::ONBOARDING_RESET_CONFIRMATION_MESSAGE;
-            $this->messageRepository->logMessage($userId, $targetId, 'assistant', $response);
-            return $response;
         }
 
-        if ($chatConfig['onboarding_step'] === -1) { // Awaiting reset confirmation
+        if ($chatConfig['onboarding_step'] === self::RESET_CONFIRMATION_AWAIT_STEP) { // Awaiting reset confirmation
             if (strtoupper(trim($message)) === 'YES') {
                 // Perform reset
                 $this->messageRepository->deleteMessagesByTarget($targetId);
                 $this->db->deleteChatConfig($targetId); // Deletes the config, will be recreated on next message
-                $response = "Configuration and message history for this chat have been reset. We can start fresh now!";
-                // Log this reset confirmation as user and then assistant response
-                // $this->messageRepository->logMessage($userId, $targetId, 'user', $message); // User said YES
+                $response = "Configuration and message history for this chat have been reset. We can start fresh now! Send any message to begin onboarding.";
                 $this->messageRepository->logMessage($userId, $targetId, 'assistant', $response);
                 return $response;
             } else {
-                $chatConfig['onboarding_step'] = $isNewChatConfig ? 0 : self::ONBOARDING_COMPLETED_STEP; // Revert to previous state or new if it was a fresh config
-                $this->db->saveChatConfig($targetId, $chatConfig);
-                $response = "Reset cancelled. Let's continue where we left off.";
+                // Determine previous state before reset was initiated. If it was new, back to 0, else to completed.
+                $previousState = $isNewChatConfig ? 0 : self::ONBOARDING_COMPLETED_STEP;
+                // Check if the config was deleted in a parallel request perhaps, or if $isNewChatConfig logic needs re-eval.
+                // For robustness, if trying to revert but config is gone, just let it be new.
+                $existingConfigCheck = $this->db->getChatConfig($targetId); // Re-check if config still exists
+                if ($existingConfigCheck === null) { // Config was deleted, perhaps by a quick double confirmation elsewhere
+                     $response = "Reset was already processed or chat is new. Send any message to begin onboarding.";
+                } else {
+                    $chatConfig['onboarding_step'] = $previousState; 
+                    $this->db->saveChatConfig($targetId, $chatConfig);
+                    $response = "Reset cancelled. Let's continue where we left off.";
+                }
                  $this->messageRepository->logMessage($userId, $targetId, 'assistant', $response);
                 return $response;
             }
@@ -160,12 +167,18 @@ class Chatbot {
         }
         // END ONBOARDING FLOW
 
-        // If bot is not mentioned and it's required for this chat, exit (unless it was a /reset or onboarding message)
-        $botMentionSetting = $this->db->getSetting('botMention', 'AI'); // Fallback bot name
-        if ($chatConfig['requires_mention'] && stripos($message, '@' . $botMentionSetting) === false) {
-            // Do not exit if it was a /reset related message already handled, or during onboarding
-             error_log("Bot not mentioned and mention is required. Exiting for targetId: {$targetId}");
-            exit; // Or return a silent response, or a hint
+        // If onboarding is complete, then check for mention requirements.
+        // This check should not happen during onboarding itself.
+        if ($chatConfig['onboarding_step'] === self::ONBOARDING_COMPLETED_STEP) {
+            $botMentionSetting = $this->db->getSetting('botMention', 'AI'); // Fallback bot name
+            if ($chatConfig['requires_mention'] && stripos($message, '@' . $botMentionSetting) === false) {
+                error_log("Bot not mentioned and mention is required for completed chat. Exiting for targetId: {$targetId}");
+                // Consider returning a specific silent response or just exiting.
+                // For now, we exit as the original connect.php did.
+                // However, ensure message is logged first if that's desired even for unmentioned messages.
+                // The user message IS logged at the very beginning of this function.
+                exit; 
+            }
         }
 
         // Inject user info (name only, history is handled separately)

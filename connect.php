@@ -98,10 +98,10 @@ try {
     }
     
     // Check if the bot is mentioned
-    if (stripos($message, '@' . $botMention) === false) {
-        // Exit if the bot is not mentioned
-        exit;
-    }
+    // if (stripos($message, '@' . $botMention) === false) {
+    //     // Exit if the bot is not mentioned
+    //     exit;
+    // }
     
         // Process the user message
         $currentTime = date('c');
