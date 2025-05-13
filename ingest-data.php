@@ -105,9 +105,6 @@ try {
     log_message("Using config file: $configFile", true);
     log_message("Using data directory: $dataDir", true);
     
-    // Load config
-    $config = Config::getInstance($configFile);
-    
     // Initialize database
     $db = Database::getInstance($dbPath);
     
@@ -129,7 +126,6 @@ try {
     
     // Initialize data processor
     $dataProcessor = new DataProcessor(
-        $config,
         $llmClient,
         $db,
         $dataDir,

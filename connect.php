@@ -2,7 +2,6 @@
 require_once 'vendor/autoload.php';
 
 use EDUC\Core\Environment;
-use EDUC\Core\Config;
 use EDUC\Core\Chatbot;
 use EDUC\API\LLMClient;
 use EDUC\Database\Database;
@@ -50,12 +49,10 @@ if (!hash_equals($generatedDigest, strtolower($signature))) {
 $message = $data['object']['content'];
 $name_of_user = $data['actor']['name'];
 $id_of_user = $data['actor']['id'];
+$target_id = $data['target']['id'];
 
 // Initialize components
 try {
-    // Initialize the configuration
-    $config = Config::getInstance(Environment::get('AI_CONFIG_FILE'));
-    
     // Initialize the database
     $dbPath = Environment::get('DB_PATH', dirname(__FILE__) . '/database/chatbot.sqlite');
     $db = Database::getInstance($dbPath);
@@ -69,7 +66,9 @@ try {
     
     // Check if we should use RAG
     $useRag = strtolower(Environment::get('USE_RAG', 'true')) === 'true';
-    $debug = strtolower(Environment::get('DEBUG', 'false')) === 'true';
+    // Get debug mode setting from database, default to false
+    $debugSetting = $db->getSetting('debug', 'false');
+    $debug = strtolower($debugSetting) === 'true';
     $retriever = null;
     
     if ($useRag) {
@@ -78,7 +77,6 @@ try {
         
         // Get RAG configuration from environment or use defaults
         $topK = (int)Environment::get('RAG_TOP_K', 5);
-        $embeddingModel = Environment::get('EMBEDDING_MODEL', 'e5-mistral-7b-instruct');
         
         // Create custom llm client for embeddings if a different endpoint is specified
         $embeddingEndpoint = Environment::get('EMBEDDING_API_ENDPOINT');
@@ -89,24 +87,29 @@ try {
         $retriever = new Retriever($embeddingClient, $embeddingRepository, $topK);
     }
     
-    // Initialize the chatbot with debug mode if enabled
-    $chatbot = new Chatbot($config, $llmClient, $db, $retriever, $debug);
+    // Initialize the chatbot without config, with debug mode if enabled
+    $chatbot = new Chatbot($llmClient, $db, $retriever, $debug);
     
-    // Get the bot mention from config
-    $botMention = $config->get('botMention', '');
-    
-    // Check if the bot is mentioned
-    if (stripos($message, '@' . $botMention) === false) {
-        // Exit if the bot is not mentioned
-        exit;
+    // Get the bot mention from the database settings
+    $botMention = $db->getSetting('botMention', 'defaultBotMention');
+    if (empty($botMention)) {
+        error_log("Warning: botMention setting not found in database, using fallback.");
+        $botMention = 'AI';
     }
     
-    // Process the user message
-    $llmResponse = $chatbot->processUserMessage($message, $id_of_user, $name_of_user);
+    // Check if the bot is mentioned
+    // if (stripos($message, '@' . $botMention) === false) {
+    //     // Exit if the bot is not mentioned
+    //     exit;
+    // }
+    
+        // Process the user message
+        $currentTime = date('c');
+        $llmResponse = $chatbot->processUserMessage($message, $id_of_user, $name_of_user, $target_id, $currentTime);
     
 } catch (\Exception $e) {
-    error_log("Error initializing components: " . $e->getMessage());
-    $llmResponse = "Sorry, I encountered an error: " . $e->getMessage();
+    error_log("Error initializing components or processing message: " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
+    $llmResponse = "Sorry, I encountered an internal error. Please try again later or contact an administrator if the problem persists.";
 }
 
 // 4. Send a reply to the chat
@@ -149,8 +152,14 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
 // Execute the API request and store the response
 $response = curl_exec($ch);
 
+// Check for cURL errors
+if(curl_errno($ch)){
+    error_log('Curl error in connect.php: ' . curl_error($ch));
+}
+
 // Close the cURL session
 curl_close($ch);
 
 // Optional: Log or handle the response for debugging purposes
+error_log("Reply sent to Nextcloud Talk. API response: " . $response);
 ?>

@@ -1,45 +1,10 @@
 <?php
-namespace EDUC\Core;
+// No longer needed as settings are managed in the database via the admin panel
+// and Chatbot.php no longer depends on this for those settings.
 
-class Config {
-    private array $config;
-    private static ?Config $instance = null;
+// Optional: Keep for other potential config needs? For now, assume removal.
+//namespace EDUC\Core;
 
-    private function __construct(string $configPath) {
-        $configContent = file_get_contents($configPath);
-        if ($configContent === false) {
-            throw new \Exception("Error loading config file: $configPath");
-        }
-
-        $config = json_decode($configContent, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new \Exception('Error parsing config file: ' . json_last_error_msg());
-        }
-
-        $this->config = $config;
-    }
-
-    public static function getInstance(string $configPath = null): self {
-        if (self::$instance === null && $configPath !== null) {
-            self::$instance = new self($configPath);
-        }
-        
-        if (self::$instance === null) {
-            throw new \Exception("Config instance not initialized");
-        }
-        
-        return self::$instance;
-    }
-
-    public function get(string $key, $default = null) {
-        return $this->config[$key] ?? $default;
-    }
-
-    public function getAll(): array {
-        return $this->config;
-    }
-
-    public function set(string $key, $value): void {
-        $this->config[$key] = $value;
-    }
-} 
+// The Config class previously defined here has been removed as its functionality
+// for systemPrompt, model, and botMention is now handled by the database
+// and accessed via the Database class. 
