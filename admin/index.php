@@ -239,7 +239,8 @@ function processDocuments(Database $db, ?LLMClient $llmClient): array {
     }
     
     try {
-        $processor = new DocumentProcessor($llmClient, $db);
+        $embeddingRepository = new EmbeddingRepository($db);
+        $processor = new DocumentProcessor($llmClient, $db, $embeddingRepository);
         $result = $processor->processAllDocuments();
         
         return [
