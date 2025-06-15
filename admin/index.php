@@ -34,15 +34,30 @@ $settings = $db->getAllSettings();
 // Initialize LLM client for model fetching
 $llmClient = null;
 $availableModels = [];
+$llmClientError = null;
+
 try {
-    $llmClient = new LLMClient(
-        Environment::get('AI_API_KEY'),
-        Environment::get('AI_API_ENDPOINT'),
-        Environment::get('EMBEDDING_API_ENDPOINT'),
-        Environment::get('MODELS_API_ENDPOINT')
-    );
-    $availableModels = $llmClient->getAvailableModels();
+    $apiKey = Environment::get('AI_API_KEY');
+    $apiEndpoint = Environment::get('AI_API_ENDPOINT');
+    
+    // Only initialize LLM client if required environment variables are set
+    if (!empty($apiKey) && !empty($apiEndpoint)) {
+        $llmClient = new LLMClient(
+            $apiKey,
+            $apiEndpoint,
+            Environment::get('EMBEDDING_API_ENDPOINT'),
+            Environment::get('MODELS_API_ENDPOINT')
+        );
+        $availableModels = $llmClient->getAvailableModels();
+    } else {
+        $missingVars = [];
+        if (empty($apiKey)) $missingVars[] = 'AI_API_KEY';
+        if (empty($apiEndpoint)) $missingVars[] = 'AI_API_ENDPOINT';
+        $llmClientError = 'Missing environment variables: ' . implode(', ', $missingVars);
+        Logger::warning('LLM client not initialized - missing environment variables', ['missing' => $missingVars]);
+    }
 } catch (Exception $e) {
+    $llmClientError = $e->getMessage();
     Logger::error('Failed to initialize LLM client in admin panel', ['error' => $e->getMessage()]);
 }
 
@@ -518,17 +533,40 @@ $csrfToken = Security::generateCSRFToken();
                                     <div class="mb-3">
                                         <label for="model" class="form-label">AI Model</label>
                                         <select class="form-select" id="model" name="model" required>
-                                            <?php foreach ($availableModels as $model): ?>
-                                                <option value="<?= htmlspecialchars($model['id']) ?>" 
-                                                        <?= ($settings['model']['value'] ?? '') === $model['id'] ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($model['name']) ?>
-                                                    <?php if (!empty($model['capabilities'])): ?>
-                                                        (<?= implode(', ', $model['capabilities']) ?>)
-                                                    <?php endif; ?>
+                                            <?php if ($llmClientError): ?>
+                                                <option value="" selected disabled>
+                                                    API Configuration Required
                                                 </option>
-                                            <?php endforeach; ?>
+                                                <!-- Fallback models for configuration -->
+                                                <option value="meta-llama-3.1-8b-instruct" <?= ($settings['model']['value'] ?? '') === 'meta-llama-3.1-8b-instruct' ? 'selected' : '' ?>>
+                                                    Meta Llama 3.1 8B Instruct (fallback)
+                                                </option>
+                                                <option value="llama-3.3-70b-instruct" <?= ($settings['model']['value'] ?? '') === 'llama-3.3-70b-instruct' ? 'selected' : '' ?>>
+                                                    Llama 3.3 70B Instruct (fallback)
+                                                </option>
+                                            <?php elseif (empty($availableModels)): ?>
+                                                <option value="" selected disabled>
+                                                    No models available
+                                                </option>
+                                            <?php else: ?>
+                                                <?php foreach ($availableModels as $model): ?>
+                                                    <option value="<?= htmlspecialchars($model['id']) ?>" 
+                                                            <?= ($settings['model']['value'] ?? '') === $model['id'] ? 'selected' : '' ?>>
+                                                        <?= htmlspecialchars($model['name']) ?>
+                                                        <?php if (!empty($model['capabilities'])): ?>
+                                                            (<?= implode(', ', $model['capabilities']) ?>)
+                                                        <?php endif; ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            <?php endif; ?>
                                         </select>
-                                        <div class="form-text">Select the AI model to use for responses</div>
+                                        <div class="form-text">
+                                            <?php if ($llmClientError): ?>
+                                                <span class="text-warning">⚠️ Configure API settings to load available models</span>
+                                            <?php else: ?>
+                                                Select the AI model to use for responses
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
 
                                     <div class="mb-3">
@@ -722,7 +760,18 @@ $csrfToken = Security::generateCSRFToken();
                                 </form>
                             </div>
                             <div class="card-body">
-                                <?php if (empty($availableModels)): ?>
+                                <?php if ($llmClientError): ?>
+                                    <div class="alert alert-warning">
+                                        <i class="bi bi-exclamation-triangle"></i>
+                                        <strong>API Configuration Required</strong><br>
+                                        <?= htmlspecialchars($llmClientError) ?><br>
+                                        <small class="mt-2 d-block">
+                                            Please configure the following environment variables in Cloudron:
+                                            <code>AI_API_KEY</code>, <code>AI_API_ENDPOINT</code>, 
+                                            <code>EMBEDDING_API_ENDPOINT</code>, <code>MODELS_API_ENDPOINT</code>
+                                        </small>
+                                    </div>
+                                <?php elseif (empty($availableModels)): ?>
                                     <div class="alert alert-warning">
                                         <i class="bi bi-exclamation-triangle"></i>
                                         No models available. Please check your API configuration.
