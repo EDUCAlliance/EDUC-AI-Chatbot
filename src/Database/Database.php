@@ -37,27 +37,63 @@ class Database {
      */
     private function connect(): void {
         try {
-            // Try Cloudron database URL first
-            $databaseUrl = Environment::get('DATABASE_URL') ?? Environment::get('CLOUDRON_POSTGRESQL_URL');
+            // Check if PostgreSQL PDO driver is available
+            if (!extension_loaded('pdo_pgsql')) {
+                throw new Exception('PostgreSQL PDO extension (pdo_pgsql) is not loaded. Please ensure it is installed and enabled.');
+            }
             
-            if ($databaseUrl) {
-                $this->connection = new PDO($databaseUrl);
-                Logger::info('Connected to database using Cloudron URL');
-            } else {
-                // Fallback to individual parameters
-                $host = Environment::get('DB_HOST', 'localhost');
-                $port = Environment::get('DB_PORT', '5432');
-                $database = Environment::get('DB_NAME', 'chatbot');
-                $username = Environment::get('DB_USER', 'postgres');
-                $password = Environment::get('DB_PASSWORD', '');
+            // Get available PDO drivers for debugging
+            $availableDrivers = PDO::getAvailableDrivers();
+            Logger::info('Available PDO drivers', ['drivers' => $availableDrivers]);
+            
+            if (!in_array('pgsql', $availableDrivers)) {
+                throw new Exception('PostgreSQL PDO driver not found in available drivers: ' . implode(', ', $availableDrivers));
+            }
+            
+            // Try Cloudron database connection using individual parameters (more reliable)
+            $host = Environment::get('CLOUDRON_POSTGRESQL_HOST') ?? Environment::get('DB_HOST', 'localhost');
+            $port = Environment::get('CLOUDRON_POSTGRESQL_PORT') ?? Environment::get('DB_PORT', '5432');
+            $database = Environment::get('CLOUDRON_POSTGRESQL_DATABASE') ?? Environment::get('DB_NAME', 'chatbot');
+            $username = Environment::get('CLOUDRON_POSTGRESQL_USERNAME') ?? Environment::get('DB_USER', 'postgres');
+            $password = Environment::get('CLOUDRON_POSTGRESQL_PASSWORD') ?? Environment::get('DB_PASSWORD', '');
+            
+            // Log connection attempt (without password)
+            Logger::info('Attempting database connection', [
+                'host' => $host,
+                'port' => $port,
+                'database' => $database,
+                'username' => $username,
+                'has_password' => !empty($password)
+            ]);
+            
+            if (empty($host) || empty($database) || empty($username)) {
+                // Fallback to DATABASE_URL or CLOUDRON_POSTGRESQL_URL
+                $databaseUrl = Environment::get('DATABASE_URL') ?? Environment::get('CLOUDRON_POSTGRESQL_URL');
                 
+                if (!$databaseUrl) {
+                    throw new Exception('No database connection parameters found. Required: host, database, username');
+                }
+                
+                Logger::info('Using database URL connection');
+                $this->connection = new PDO($databaseUrl);
+                
+            } else {
+                // Use individual parameters (preferred for Cloudron)
                 $dsn = "pgsql:host={$host};port={$port};dbname={$database}";
-                $this->connection = new PDO($dsn, $username, $password);
+                
+                $options = [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_TIMEOUT => 10
+                ];
+                
+                $this->connection = new PDO($dsn, $username, $password, $options);
                 Logger::info('Connected to database using individual parameters');
             }
             
-            $this->connection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            $this->connection->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+            // Verify connection
+            $version = $this->connection->query('SELECT version()')->fetchColumn();
+            Logger::info('Database connection successful', ['version' => substr($version, 0, 50)]);
             
             // Enable pgvector extension if available
             $this->enablePgVector();
@@ -65,9 +101,15 @@ class Database {
         } catch (PDOException $e) {
             Logger::error('Database connection failed', [
                 'error' => $e->getMessage(),
-                'code' => $e->getCode()
+                'code' => $e->getCode(),
+                'available_drivers' => PDO::getAvailableDrivers()
             ]);
             throw new Exception("Database connection failed: " . $e->getMessage());
+        } catch (Exception $e) {
+            Logger::error('Database setup failed', [
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
         }
     }
     

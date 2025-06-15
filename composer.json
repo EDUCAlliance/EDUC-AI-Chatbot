@@ -20,10 +20,12 @@
         "ext-json": "*",
         "ext-pdo": "*",
         "ext-pdo_pgsql": "*",
+        "ext-pgsql": "*",
         "ext-fileinfo": "*",
         "ext-zip": "*",
         "ext-mbstring": "*",
         "ext-gd": "*",
+        "ext-openssl": "*",
         "ramsey/uuid": "^4.7"
     },
     "require-dev": {
@@ -31,12 +33,25 @@
     },
     "scripts": {
         "post-install-cmd": [
+            "@php -r \"echo 'PHP Version: ' . phpversion() . PHP_EOL;\"",
+            "@php -r \"echo 'Available PDO drivers: ' . implode(', ', PDO::getAvailableDrivers()) . PHP_EOL;\"",
+            "@php -r \"echo 'PostgreSQL PDO extension loaded: ' . (extension_loaded('pdo_pgsql') ? 'YES' : 'NO') . PHP_EOL;\"",
+            "@php -r \"echo 'PostgreSQL extension loaded: ' . (extension_loaded('pgsql') ? 'YES' : 'NO') . PHP_EOL;\"",
             "mkdir -p uploads cache logs",
-            "chmod 755 uploads cache logs"
+            "chmod 755 uploads cache logs",
+            "@php -r \"echo 'Directories created successfully' . PHP_EOL;\""
+        ],
+        "check-env": [
+            "@php -r \"echo 'Environment Check:' . PHP_EOL;\"",
+            "@php -r \"echo 'CLOUDRON_POSTGRESQL_HOST: ' . (getenv('CLOUDRON_POSTGRESQL_HOST') ?: 'NOT SET') . PHP_EOL;\"",
+            "@php -r \"echo 'CLOUDRON_POSTGRESQL_DATABASE: ' . (getenv('CLOUDRON_POSTGRESQL_DATABASE') ?: 'NOT SET') . PHP_EOL;\"",
+            "@php -r \"echo 'CLOUDRON_POSTGRESQL_USERNAME: ' . (getenv('CLOUDRON_POSTGRESQL_USERNAME') ?: 'NOT SET') . PHP_EOL;\"",
+            "@php -r \"echo 'PostgreSQL extensions: pdo_pgsql=' . (extension_loaded('pdo_pgsql') ? 'YES' : 'NO') . ', pgsql=' . (extension_loaded('pgsql') ? 'YES' : 'NO') . PHP_EOL;\""
         ]
     },
     "config": {
         "optimize-autoloader": true,
-        "sort-packages": true
+        "sort-packages": true,
+        "platform-check": false
     }
 } 

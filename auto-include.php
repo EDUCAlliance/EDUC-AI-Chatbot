@@ -5,7 +5,7 @@
  */
 
 // Check if we're running in Cloudron environment
-if (getenv('CLOUDRON_ENVIRONMENT')) {
+if (getenv('CLOUDRON_ENVIRONMENT') || getenv('CLOUDRON_POSTGRESQL_HOST')) {
     // Load custom environment variables if they exist
     $customEnvFile = __DIR__ . '/custom-env.php';
     if (file_exists($customEnvFile)) {
@@ -27,6 +27,42 @@ if (getenv('CLOUDRON_ENVIRONMENT')) {
     if (getenv('CLOUDRON_POSTGRESQL_URL') && !getenv('DATABASE_URL')) {
         putenv('DATABASE_URL=' . getenv('CLOUDRON_POSTGRESQL_URL'));
         $_ENV['DATABASE_URL'] = getenv('CLOUDRON_POSTGRESQL_URL');
+    }
+    
+    // Diagnostic logging for database connection
+    if (function_exists('error_log')) {
+        $logPrefix = '[EDUC-Chatbot INIT]';
+        
+        // Check if PDO PostgreSQL is available
+        if (!extension_loaded('pdo_pgsql')) {
+            error_log("{$logPrefix} WARNING: pdo_pgsql extension not loaded");
+        }
+        
+        // Check available PDO drivers
+        if (class_exists('PDO')) {
+            $drivers = PDO::getAvailableDrivers();
+            if (!in_array('pgsql', $drivers)) {
+                error_log("{$logPrefix} ERROR: PostgreSQL driver not available. Available: " . implode(', ', $drivers));
+            }
+        }
+        
+        // Check database environment variables
+        $dbVars = [
+            'CLOUDRON_POSTGRESQL_HOST',
+            'CLOUDRON_POSTGRESQL_DATABASE', 
+            'CLOUDRON_POSTGRESQL_USERNAME'
+        ];
+        
+        $missingVars = [];
+        foreach ($dbVars as $var) {
+            if (!getenv($var)) {
+                $missingVars[] = $var;
+            }
+        }
+        
+        if (!empty($missingVars)) {
+            error_log("{$logPrefix} WARNING: Missing database environment variables: " . implode(', ', $missingVars));
+        }
     }
     
     // Set default API endpoints if not configured
