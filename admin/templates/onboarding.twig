@@ -6,68 +6,431 @@
 
 {% block content %}
     <div class="box">
-        <form action="{{ url_for('onboarding') }}" method="post">
-            <!-- Bot Mention Configuration -->
-            <div class="field">
-                <label class="label">Bot Mention Name</label>
-                <div class="control">
-                    <input class="input" type="text" name="bot_mention" value="{{ bot_mention }}" placeholder="@educai">
+        <div class="level mb-5">
+            <div class="level-left">
+                <div class="level-item">
+                    <div>
+                        <h2 class="subtitle has-text-weight-semibold mb-2">
+                            <span class="icon-text">
+                                <span class="icon has-text-primary">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                                    </svg>
+                                </span>
+                                <span>Bot Configuration & Onboarding</span>
+                            </span>
+                        </h2>
+                        <p class="has-text-grey">Configure how users interact with your bot and set up initial conversation flows.</p>
+                    </div>
                 </div>
-                <p class="help">
+            </div>
+        </div>
+
+        <form action="{{ url_for('onboarding') }}" method="post" id="onboardingForm">
+            <!-- Bot Mention Configuration -->
+            <div class="box has-background-light mb-5">
+                <h3 class="title is-5 mb-4">
                     <span class="icon-text">
                         <span class="icon has-text-info">
-                            <i class="fas fa-info-circle"></i>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6z"/>
+                                <rect x="2" y="9" width="4" height="12"/>
+                                <circle cx="4" cy="4" r="2"/>
+                            </svg>
                         </span>
-                        <span>Users must mention this name (e.g., <code>{{ bot_mention }} hello</code>) for the bot to respond. This prevents the bot from reacting to every message in the room.</span>
+                        <span>Bot Mention Settings</span>
                     </span>
-                </p>
-            </div>
+                </h3>
 
-            <hr>
+                <div class="field">
+                    <label class="label">
+                        <span class="icon-text">
+                            <span class="icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6z"/>
+                                    <rect x="2" y="9" width="4" height="12"/>
+                                    <circle cx="4" cy="4" r="2"/>
+                                </svg>
+                            </span>
+                            <span>Bot Mention Name</span>
+                        </span>
+                    </label>
+                    <div class="control has-icons-left">
+                        <input class="input is-medium" type="text" name="bot_mention" id="botMention" 
+                               value="{{ bot_mention }}" placeholder="@educai" pattern="@?[a-zA-Z0-9_-]+">
+                        <span class="icon is-small is-left">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6z"/>
+                                <rect x="2" y="9" width="4" height="12"/>
+                                <circle cx="4" cy="4" r="2"/>
+                            </svg>
+                        </span>
+                    </div>
+                    <p class="help">
+                        <span class="icon-text">
+                            <span class="icon has-text-info">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="m9 12 2 2 4-4"/>
+                                </svg>
+                            </span>
+                            <span>Users must mention this name (e.g., <code id="mentionExample">{{ bot_mention }} hello</code>) for the bot to respond.</span>
+                        </span>
+                    </p>
+                </div>
+
+                <div class="notification is-info is-light">
+                    <h5 class="title is-6">
+                        <span class="icon-text">
+                            <span class="icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                                    <line x1="12" x2="12.01" y1="17" y2="17"/>
+                                </svg>
+                            </span>
+                            <span>How Bot Mentions Work</span>
+                        </span>
+                    </h5>
+                    <div class="content is-small">
+                        <div class="columns">
+                            <div class="column">
+                                <ul>
+                                    <li><strong>Required:</strong> Users must include the bot mention in their message</li>
+                                    <li><strong>Case Insensitive:</strong> Both lowercase and uppercase work</li>
+                                </ul>
+                            </div>
+                            <div class="column">
+                                <ul>
+                                    <li><strong>Position Flexible:</strong> Mention can be anywhere in the message</li>
+                                    <li><strong>Without Mention:</strong> Bot ignores the message to avoid spam</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Onboarding Questions -->
-            <div class="columns">
-                <div class="column">
-                    <div class="field">
-                        <label class="label">Group Chat Questions</label>
-                        <div class="control">
-                            <textarea class="textarea" name="group_questions" rows="8" placeholder="One question per line">{{ group_questions }}</textarea>
-                        </div>
-                        <p class="help">These questions will be asked in new group chats during onboarding.</p>
-                    </div>
-                </div>
-                <div class="column">
-                    <div class="field">
-                        <label class="label">Direct Message Questions</label>
-                        <div class="control">
-                            <textarea class="textarea" name="dm_questions" rows="8" placeholder="One question per line">{{ dm_questions }}</textarea>
-                        </div>
-                        <p class="help">These questions will be asked in new direct messages during onboarding.</p>
-                    </div>
-                </div>
-            </div>
+            <div class="box">
+                <h3 class="title is-5 mb-4">
+                    <span class="icon-text">
+                        <span class="icon has-text-primary">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                                <line x1="12" x2="12.01" y1="17" y2="17"/>
+                            </svg>
+                        </span>
+                        <span>Onboarding Questions</span>
+                    </span>
+                </h3>
 
-            <!-- Additional Configuration Info -->
-            <div class="notification is-info is-light">
-                <h5 class="title is-6">How Bot Mentions Work:</h5>
-                <ul>
-                    <li><strong>Required:</strong> Users must include the bot mention in their message (e.g., <code>{{ bot_mention }} explain this topic</code>)</li>
-                    <li><strong>Case Insensitive:</strong> Both <code>{{ bot_mention }}</code> and <code>{{ bot_mention | upper }}</code> will work</li>
-                    <li><strong>Position Flexible:</strong> The mention can be anywhere in the message</li>
-                    <li><strong>Without Mention:</strong> The bot will ignore the message completely to avoid spam</li>
-                </ul>
+                <div class="columns">
+                    <div class="column">
+                        <div class="field">
+                            <label class="label">
+                                <span class="icon-text">
+                                    <span class="icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                            <circle cx="9" cy="7" r="4"/>
+                                            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                                        </svg>
+                                    </span>
+                                    <span>Group Chat Questions</span>
+                                </span>
+                            </label>
+                            <div class="control">
+                                <textarea class="textarea is-medium" name="group_questions" id="groupQuestions" 
+                                          rows="8" placeholder="One question per line&#10;Example:&#10;What topics are you interested in learning about?&#10;How can I help your team today?">{{ group_questions }}</textarea>
+                            </div>
+                            <div class="level is-mobile mt-2">
+                                <div class="level-left">
+                                    <div class="level-item">
+                                        <p class="help">These questions will be asked in new group chats during onboarding.</p>
+                                    </div>
+                                </div>
+                                <div class="level-right">
+                                    <div class="level-item">
+                                        <span class="tag is-light" id="groupQuestionCount">0 questions</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column">
+                        <div class="field">
+                            <label class="label">
+                                <span class="icon-text">
+                                    <span class="icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                            <circle cx="12" cy="7" r="4"/>
+                                        </svg>
+                                    </span>
+                                    <span>Direct Message Questions</span>
+                                </span>
+                            </label>
+                            <div class="control">
+                                <textarea class="textarea is-medium" name="dm_questions" id="dmQuestions" 
+                                          rows="8" placeholder="One question per line&#10;Example:&#10;What would you like to learn about today?&#10;How can I assist you with your research?">{{ dm_questions }}</textarea>
+                            </div>
+                            <div class="level is-mobile mt-2">
+                                <div class="level-left">
+                                    <div class="level-item">
+                                        <p class="help">These questions will be asked in new direct messages during onboarding.</p>
+                                    </div>
+                                </div>
+                                <div class="level-right">
+                                    <div class="level-item">
+                                        <span class="tag is-light" id="dmQuestionCount">0 questions</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="notification is-success is-light">
+                    <h5 class="title is-6">
+                        <span class="icon-text">
+                            <span class="icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 12l2 2 4-4"/>
+                                    <circle cx="12" cy="12" r="9"/>
+                                </svg>
+                            </span>
+                            <span>Onboarding Best Practices</span>
+                        </span>
+                    </h5>
+                    <div class="content is-small">
+                        <div class="columns">
+                            <div class="column">
+                                <h6 class="title is-6">Effective Questions:</h6>
+                                <ul>
+                                    <li>Keep questions simple and clear</li>
+                                    <li>Ask about user needs and preferences</li>
+                                    <li>Include examples when helpful</li>
+                                </ul>
+                            </div>
+                            <div class="column">
+                                <h6 class="title is-6">Question Flow:</h6>
+                                <ul>
+                                    <li>Start with general topics</li>
+                                    <li>Progress to specific needs</li>
+                                    <li>End with how the bot can help</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="field">
                 <div class="control">
-                    <button class="button is-primary" type="submit">
+                    <button class="button is-primary is-medium" type="submit" id="saveBtn">
                         <span class="icon">
-                            <i class="fas fa-save"></i>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                <polyline points="17,21 17,13 7,13 7,21"/>
+                                <polyline points="7,3 7,8 15,8"/>
+                            </svg>
                         </span>
                         <span>Save Configuration</span>
+                    </button>
+                    <button class="button is-light is-medium ml-3" type="button" id="previewBtn">
+                        <span class="icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </span>
+                        <span>Preview Flow</span>
                     </button>
                 </div>
             </div>
         </form>
     </div>
+
+    <!-- Preview Modal -->
+    <div class="modal" id="previewModal">
+        <div class="modal-background"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">
+                    <span class="icon-text">
+                        <span class="icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </span>
+                        <span>Onboarding Flow Preview</span>
+                    </span>
+                </p>
+                <button class="delete" aria-label="close" id="closeModal"></button>
+            </header>
+            <section class="modal-card-body">
+                <div class="tabs">
+                    <ul>
+                        <li class="is-active" data-tab="group">
+                            <a>
+                                <span class="icon is-small">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                        <circle cx="9" cy="7" r="4"/>
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                                    </svg>
+                                </span>
+                                <span>Group Chat</span>
+                            </a>
+                        </li>
+                        <li data-tab="dm">
+                            <a>
+                                <span class="icon is-small">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                        <circle cx="12" cy="7" r="4"/>
+                                    </svg>
+                                </span>
+                                <span>Direct Message</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="content" id="previewContent">
+                    <!-- Preview content will be inserted here -->
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('onboardingForm');
+            const saveBtn = document.getElementById('saveBtn');
+            const botMention = document.getElementById('botMention');
+            const mentionExample = document.getElementById('mentionExample');
+            const groupQuestions = document.getElementById('groupQuestions');
+            const dmQuestions = document.getElementById('dmQuestions');
+            const groupQuestionCount = document.getElementById('groupQuestionCount');
+            const dmQuestionCount = document.getElementById('dmQuestionCount');
+            const previewBtn = document.getElementById('previewBtn');
+            const modal = document.getElementById('previewModal');
+            const closeModal = document.getElementById('closeModal');
+            const previewContent = document.getElementById('previewContent');
+
+            // Store original values
+            const originalValues = {
+                botMention: botMention.value,
+                groupQuestions: groupQuestions.value,
+                dmQuestions: dmQuestions.value
+            };
+
+            // Update mention example
+            botMention.addEventListener('input', function() {
+                let mention = this.value.trim();
+                if (!mention.startsWith('@')) {
+                    mention = '@' + mention;
+                }
+                mentionExample.textContent = mention + ' hello';
+                checkChanges();
+            });
+
+            // Count questions
+            function countQuestions(textarea, countElement) {
+                const questions = textarea.value.split('\n').filter(q => q.trim().length > 0);
+                countElement.textContent = `${questions.length} question${questions.length !== 1 ? 's' : ''}`;
+                
+                if (questions.length === 0) {
+                    countElement.classList.add('has-text-warning');
+                } else {
+                    countElement.classList.remove('has-text-warning');
+                }
+            }
+
+            groupQuestions.addEventListener('input', function() {
+                countQuestions(this, groupQuestionCount);
+                checkChanges();
+            });
+
+            dmQuestions.addEventListener('input', function() {
+                countQuestions(this, dmQuestionCount);
+                checkChanges();
+            });
+
+            // Check for changes
+            function checkChanges() {
+                const hasChanges = botMention.value !== originalValues.botMention || 
+                                  groupQuestions.value !== originalValues.groupQuestions || 
+                                  dmQuestions.value !== originalValues.dmQuestions;
+
+                if (hasChanges) {
+                    saveBtn.classList.add('is-warning');
+                    saveBtn.innerHTML = '<span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg></span><span>Save Changes</span>';
+                } else {
+                    saveBtn.classList.remove('is-warning');
+                    saveBtn.innerHTML = '<span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg></span><span>Save Configuration</span>';
+                }
+            }
+
+            // Form submission
+            form.addEventListener('submit', function() {
+                saveBtn.classList.add('is-loading');
+                saveBtn.disabled = true;
+            });
+
+            // Preview functionality
+            previewBtn.addEventListener('click', function() {
+                showPreview('group');
+                modal.classList.add('is-active');
+            });
+
+            function showPreview(type) {
+                const questions = type === 'group' ? 
+                    groupQuestions.value.split('\n').filter(q => q.trim().length > 0) :
+                    dmQuestions.value.split('\n').filter(q => q.trim().length > 0);
+                
+                if (questions.length === 0) {
+                    previewContent.innerHTML = `<p class="has-text-grey-light">No ${type === 'group' ? 'group chat' : 'direct message'} questions configured.</p>`;
+                } else {
+                    previewContent.innerHTML = `
+                        <div class="box has-background-light">
+                            <h6 class="title is-6 has-text-grey">${type === 'group' ? 'Group Chat' : 'Direct Message'} Onboarding Flow:</h6>
+                            <ol>
+                                ${questions.map(q => `<li class="mb-2"><strong>Bot:</strong> ${q}</li>`).join('')}
+                            </ol>
+                        </div>
+                        <div class="notification is-info is-light">
+                            <p><strong>Note:</strong> These questions will be asked one by one when a user first interacts with the bot in a ${type === 'group' ? 'group chat' : 'direct message'}.</p>
+                        </div>
+                    `;
+                }
+            }
+
+            // Tab switching in preview
+            document.querySelectorAll('[data-tab]').forEach(tab => {
+                tab.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    document.querySelectorAll('[data-tab]').forEach(t => t.classList.remove('is-active'));
+                    this.classList.add('is-active');
+                    showPreview(this.dataset.tab);
+                });
+            });
+
+            // Close modal
+            closeModal.addEventListener('click', function() {
+                modal.classList.remove('is-active');
+            });
+
+            modal.querySelector('.modal-background').addEventListener('click', function() {
+                modal.classList.remove('is-active');
+            });
+
+            // Initial counts
+            countQuestions(groupQuestions, groupQuestionCount);
+            countQuestions(dmQuestions, dmQuestionCount);
+        });
+    </script>
 {% endblock %} 

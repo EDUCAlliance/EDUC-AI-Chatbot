@@ -215,6 +215,47 @@ $app->post('/documents/upload', function (Request $request, Response $response) 
     return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('documents'))->withStatus(302);
 })->setName('documents-upload')->add($authMiddleware);
 
+$app->post('/documents/delete', function (Request $request, Response $response) use ($db, $app, $logger) {
+    $docId = $request->getParsedBody()['doc_id'] ?? null;
+
+    if ($docId) {
+        try {
+            $db->beginTransaction();
+
+            // Find the document to get its path for deletion
+            $stmt = $db->prepare("SELECT path FROM bot_docs WHERE id = ?");
+            $stmt->execute([(int)$docId]);
+            $doc = $stmt->fetch();
+
+            if ($doc && !empty($doc['path'])) {
+                if (file_exists($doc['path'])) {
+                    unlink($doc['path']);
+                    $logger->info('Deleted document file', ['path' => $doc['path']]);
+                } else {
+                    $logger->warning('Document file not found, but proceeding with DB deletion', ['path' => $doc['path']]);
+                }
+            }
+
+            // Delete embeddings associated with the document
+            $stmt = $db->prepare("DELETE FROM bot_embeddings WHERE doc_id = ?");
+            $stmt->execute([(int)$docId]);
+            $logger->info('Deleted embeddings for document', ['doc_id' => $docId]);
+
+            // Delete the document record itself
+            $stmt = $db->prepare("DELETE FROM bot_docs WHERE id = ?");
+            $stmt->execute([(int)$docId]);
+            $logger->info('Deleted document record from database', ['doc_id' => $docId]);
+
+            $db->commit();
+        } catch (\PDOException $e) {
+            $db->rollBack();
+            $logger->error('Failed to delete document', ['error' => $e->getMessage(), 'doc_id' => $docId]);
+        }
+    }
+
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('documents'))->withStatus(302);
+})->setName('documents-delete')->add($authMiddleware);
+
 $app->get('/models', function (Request $request, Response $response) use ($twig, $db, $apiClient) {
     $apiModels = $apiClient->getModels();
     $settings = $db->query("SELECT default_model FROM bot_settings WHERE id = 1")->fetch();

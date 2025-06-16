@@ -6,27 +6,142 @@
 
 {% block content %}
     <div class="box">
-        <form action="{{ url_for('models-update') }}" method="post">
+        <div class="level mb-5">
+            <div class="level-left">
+                <div class="level-item">
+                    <div>
+                        <h2 class="subtitle has-text-weight-semibold mb-2">
+                            <span class="icon-text">
+                                <span class="icon has-text-primary">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                                    </svg>
+                                </span>
+                                <span>Default Chat Model</span>
+                            </span>
+                        </h2>
+                        <p class="has-text-grey">Select the AI model that will handle all chat conversations and responses.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <form action="{{ url_for('models-update') }}" method="post" id="modelForm">
             <div class="field">
-                <label class="label">Default Chat Model</label>
+                <label class="label">
+                    <span class="icon-text">
+                        <span class="icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M12 1v6m0 6v6"/>
+                                <path d="m21 12-6 0m-6 0-6 0"/>
+                            </svg>
+                        </span>
+                        <span>Available Models</span>
+                    </span>
+                </label>
                 <div class="control">
-                    <div class="select is-fullwidth">
-                        <select name="model">
+                    <div class="select is-fullwidth is-medium">
+                        <select name="model" id="modelSelect">
                             {% for model in models %}
                                 <option value="{{ model.id }}" {{ model.id == current_model ? 'selected' : '' }}>
                                     {{ model.id }}
                                 </option>
+                            {% else %}
+                                <option value="">No models available</option>
                             {% endfor %}
                         </select>
                     </div>
                 </div>
-                <p class="help">This model will be used for all chat conversations.</p>
+                <p class="help">
+                    {% if current_model %}
+                        <span class="icon-text">
+                            <span class="icon has-text-success">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 12l2 2 4-4"/>
+                                    <circle cx="12" cy="12" r="9"/>
+                                </svg>
+                            </span>
+                            <span>Currently using: <strong>{{ current_model }}</strong></span>
+                        </span>
+                    {% else %}
+                        <span class="icon-text">
+                            <span class="icon has-text-warning">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                    <line x1="12" x2="12" y1="9" y2="13"/>
+                                    <line x1="12" x2="12.01" y1="17" y2="17"/>
+                                </svg>
+                            </span>
+                            <span>No model selected. Please choose a model.</span>
+                        </span>
+                    {% endif %}
+                </p>
             </div>
+
+            {% if models|length > 0 %}
+            <div class="notification is-info is-light">
+                <h5 class="title is-6">
+                    <span class="icon-text">
+                        <span class="icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="m9 12 2 2 4-4"/>
+                            </svg>
+                        </span>
+                        <span>Model Information</span>
+                    </span>
+                </h5>
+                <div class="content is-small">
+                    <ul>
+                        <li><strong>Total Available:</strong> {{ models|length }} models</li>
+                        <li><strong>Performance:</strong> Different models have varying capabilities and response speeds</li>
+                        <li><strong>Context:</strong> Some models handle longer conversations better than others</li>
+                        <li><strong>Switching:</strong> You can change models anytime without affecting existing conversations</li>
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+
             <div class="field">
                 <div class="control">
-                    <button class="button is-primary" type="submit">Save Default Model</button>
+                    <button class="button is-primary is-medium" type="submit" id="saveBtn">
+                        <span class="icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                <polyline points="17,21 17,13 7,13 7,21"/>
+                                <polyline points="7,3 7,8 15,8"/>
+                            </svg>
+                        </span>
+                        <span>Save Model Selection</span>
+                    </button>
                 </div>
             </div>
         </form>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('modelForm');
+            const saveBtn = document.getElementById('saveBtn');
+            const modelSelect = document.getElementById('modelSelect');
+
+            form.addEventListener('submit', function() {
+                saveBtn.classList.add('is-loading');
+                saveBtn.disabled = true;
+            });
+
+            // Show confirmation for model changes
+            let originalModel = modelSelect.value;
+            modelSelect.addEventListener('change', function() {
+                if (this.value !== originalModel) {
+                    saveBtn.classList.add('is-warning');
+                    saveBtn.textContent = 'Save Changes';
+                } else {
+                    saveBtn.classList.remove('is-warning');
+                    saveBtn.innerHTML = '<span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg></span><span>Save Model Selection</span>';
+                }
+            });
+        });
+    </script>
 {% endblock %} 

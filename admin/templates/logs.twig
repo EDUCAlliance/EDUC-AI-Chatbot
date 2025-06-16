@@ -3,94 +3,226 @@
 {% block heading %}System Logs{% endblock %}
 
 {% block content %}
-<div class="level">
-    <div class="level-left">
-        <div class="level-item">
-            <h1 class="title is-4">System Logs</h1>
-        </div>
-    </div>
-    <div class="level-right">
-        <div class="level-item">
-            <div class="field is-grouped">
-                <p class="control">
-                    <a href="{{ url_for('logs') }}?refresh=1" class="button is-primary is-outlined">
-                        <span class="icon">
-                            <i class="fas fa-sync-alt"></i>
-                        </span>
-                        <span>Refresh</span>
-                    </a>
-                </p>
-                <p class="control">
-                    <a href="{{ url_for('logs') }}?download=1" class="button is-outlined">
-                        <span class="icon">
-                            <i class="fas fa-download"></i>
-                        </span>
-                        <span>Download</span>
-                    </a>
-                </p>
-            </div>
-        </div>
-    </div>
-</div>
-
-{% if logStats %}
-<div class="columns">
-    <div class="column is-3">
-        <div class="notification is-info">
-            <p class="title is-5">{{ logStats.total }}</p>
-            <p class="subtitle is-6">Total Entries</p>
-        </div>
-    </div>
-    <div class="column is-3">
-        <div class="notification is-danger">
-            <p class="title is-5">{{ logStats.errors }}</p>
-            <p class="subtitle is-6">Errors</p>
-        </div>
-    </div>
-    <div class="column is-3">
-        <div class="notification is-warning">
-            <p class="title is-5">{{ logStats.warnings }}</p>
-            <p class="subtitle is-6">Warnings</p>
-        </div>
-    </div>
-    <div class="column is-3">
-        <div class="notification is-success">
-            <p class="title is-5">{{ logStats.info }}</p>
-            <p class="subtitle is-6">Info</p>
-        </div>
-    </div>
-</div>
-{% endif %}
-
 <div class="box">
-    <div class="level">
+    <div class="level mb-5">
         <div class="level-left">
             <div class="level-item">
-                <h5 class="title is-5">Log Entries</h5>
+                <div>
+                    <h2 class="subtitle has-text-weight-semibold mb-2">
+                        <span class="icon-text">
+                            <span class="icon has-text-primary">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14,2 14,8 20,8"/>
+                                    <line x1="16" x2="8" y1="13" y2="13"/>
+                                    <line x1="16" x2="8" y1="17" y2="17"/>
+                                    <polyline points="10,9 9,9 8,9"/>
+                                </svg>
+                            </span>
+                            <span>System Activity & Logs</span>
+                        </span>
+                    </h2>
+                    <p class="has-text-grey">Monitor bot activity, debug issues, and track system performance.</p>
+                </div>
             </div>
         </div>
         <div class="level-right">
             <div class="level-item">
-                <small class="has-text-grey">Showing last {{ logs|length }} entries</small>
+                <div class="field is-grouped">
+                    <p class="control">
+                        <button class="button is-primary is-outlined is-medium" id="refreshBtn">
+                            <span class="icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="1 4 1 10 7 10"/>
+                                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                                </svg>
+                            </span>
+                            <span>Refresh</span>
+                        </button>
+                    </p>
+                    <p class="control">
+                        <a href="{{ url_for('logs') }}?download=1" class="button is-outlined is-medium">
+                            <span class="icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="7,10 12,15 17,10"/>
+                                    <line x1="12" x2="12" y1="15" y2="3"/>
+                                </svg>
+                            </span>
+                            <span>Download</span>
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if logStats %}
+    <div class="dashboard-stats mb-5">
+        <div class="stat-card">
+            <p class="heading">Total Entries</p>
+            <p class="title">{{ logStats.total }}</p>
+        </div>
+        <div class="stat-card">
+            <p class="heading">Errors</p>
+            <p class="title has-text-danger">{{ logStats.errors }}</p>
+        </div>
+        <div class="stat-card">
+            <p class="heading">Warnings</p>
+            <p class="title has-text-warning">{{ logStats.warnings }}</p>
+        </div>
+        <div class="stat-card">
+            <p class="heading">Info</p>
+            <p class="title has-text-success">{{ logStats.info }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Filter Controls -->
+    <div class="box has-background-light mb-4">
+        <div class="level">
+            <div class="level-left">
+                <div class="level-item">
+                    <h5 class="title is-6 mb-0">
+                        <span class="icon-text">
+                            <span class="icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46"/>
+                                </svg>
+                            </span>
+                            <span>Filter Logs</span>
+                        </span>
+                    </h5>
+                </div>
+            </div>
+            <div class="level-right">
+                <div class="level-item">
+                    <div class="field has-addons">
+                        <div class="control">
+                            <div class="select is-small">
+                                <select id="levelFilter">
+                                    <option value="">All Levels</option>
+                                    <option value="ERROR">Errors Only</option>
+                                    <option value="WARNING">Warnings Only</option>
+                                    <option value="INFO">Info Only</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="control">
+                            <input class="input is-small" type="text" id="searchFilter" placeholder="Search messages...">
+                        </div>
+                        <div class="control">
+                            <button class="button is-small" id="clearFilters">
+                                <span class="icon">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" x2="6" y1="6" y2="18"/>
+                                        <line x1="6" x2="18" y1="6" y2="18"/>
+                                    </svg>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
     
     {% if logs %}
+    <div class="level is-mobile mb-3">
+        <div class="level-left">
+            <div class="level-item">
+                <span class="tag is-light" id="visibleCount">{{ logs|length }} entries</span>
+            </div>
+        </div>
+        <div class="level-right">
+            <div class="level-item">
+                <div class="field is-grouped">
+                    <div class="control">
+                        <button class="button is-small is-outlined" id="expandAllBtn">
+                            <span class="icon">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="7,13 12,18 17,13"/>
+                                    <polyline points="7,6 12,11 17,6"/>
+                                </svg>
+                            </span>
+                            <span>Expand All</span>
+                        </button>
+                    </div>
+                    <div class="control">
+                        <button class="button is-small is-outlined" id="collapseAllBtn">
+                            <span class="icon">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="17,11 12,6 7,11"/>
+                                    <polyline points="17,18 12,13 7,18"/>
+                                </svg>
+                            </span>
+                            <span>Collapse All</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="table-container">
-        <table class="table is-fullwidth is-striped is-hoverable">
+        <table class="table is-fullwidth is-hoverable" id="logsTable">
             <thead>
                 <tr>
-                    <th style="width: 150px;">Timestamp</th>
-                    <th style="width: 80px;">Level</th>
-                    <th>Message</th>
-                    <th style="width: 100px;">Actions</th>
+                    <th style="width: 160px;">
+                        <span class="icon-text">
+                            <span class="icon">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <polyline points="12,6 12,12 16,14"/>
+                                </svg>
+                            </span>
+                            <span>Timestamp</span>
+                        </span>
+                    </th>
+                    <th style="width: 100px;">
+                        <span class="icon-text">
+                            <span class="icon">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                    <line x1="12" x2="12" y1="9" y2="13"/>
+                                    <line x1="12" x2="12.01" y1="17" y2="17"/>
+                                </svg>
+                            </span>
+                            <span>Level</span>
+                        </span>
+                    </th>
+                    <th>
+                        <span class="icon-text">
+                            <span class="icon">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14,2 14,8 20,8"/>
+                                    <line x1="16" x2="8" y1="13" y2="13"/>
+                                    <line x1="16" x2="8" y1="17" y2="17"/>
+                                </svg>
+                            </span>
+                            <span>Message</span>
+                        </span>
+                    </th>
+                    <th style="width: 120px;">
+                        <span class="icon-text">
+                            <span class="icon">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="3"/>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2 2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                                </svg>
+                            </span>
+                            <span>Actions</span>
+                        </span>
+                    </th>
                 </tr>
             </thead>
             <tbody>
                 {% for log in logs %}
-                <tr class="log-entry">
-                    <td><code class="is-size-7">{{ log.timestamp }}</code></td>
+                <tr class="log-entry" data-level="{{ log.level }}" data-message="{{ log.message|lower }}">
+                    <td>
+                        <code class="is-size-7 has-text-grey">{{ log.timestamp }}</code>
+                    </td>
                     <td>
                         <span class="tag 
                             {% if log.level == 'ERROR' %}is-danger
@@ -106,23 +238,39 @@
                             {{ log.message|e }}
                         </div>
                         {% if log.context %}
-                        <button class="button is-small is-outlined mt-2" type="button" 
-                                onclick="toggleContext('context-{{ loop.index }}')">
-                            Show Context
-                        </button>
-                        <div class="mt-2 is-hidden" id="context-{{ loop.index }}">
-                            <pre class="has-background-light p-3"><code>{{ log.context|raw }}</code></pre>
+                        <div class="mt-2">
+                            <button class="button is-small is-outlined context-toggle" type="button" 
+                                    data-target="context-{{ loop.index }}">
+                                <span class="icon">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="6,9 12,15 18,9"/>
+                                    </svg>
+                                </span>
+                                <span>Show Context</span>
+                            </button>
+                        </div>
+                        <div class="mt-2 is-hidden context-panel" id="context-{{ loop.index }}">
+                            <div class="box has-background-dark has-text-light is-size-7">
+                                <pre class="has-text-light"><code>{{ log.context|raw }}</code></pre>
+                            </div>
                         </div>
                         {% endif %}
                     </td>
                     <td>
-                        <button class="button is-small is-outlined copy-log" 
-                                data-log="{{ log.fullLine|e('html_attr') }}" 
-                                title="Copy to clipboard">
-                            <span class="icon is-small">
-                                <i class="fas fa-copy"></i>
-                            </span>
-                        </button>
+                        <div class="field is-grouped">
+                            <div class="control">
+                                <button class="button is-small is-outlined copy-log" 
+                                        data-log="{{ log.fullLine|e('html_attr') }}" 
+                                        title="Copy to clipboard">
+                                    <span class="icon">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                        </svg>
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -132,52 +280,18 @@
     {% else %}
     <div class="has-text-centered py-6">
         <span class="icon is-large has-text-grey-light">
-            <i class="fas fa-file-alt fa-3x"></i>
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14,2 14,8 20,8"/>
+                <line x1="16" x2="8" y1="13" y2="13"/>
+                <line x1="16" x2="8" y1="17" y2="17"/>
+            </svg>
         </span>
-        <p class="has-text-grey mt-3">No log entries found.</p>
+        <p class="has-text-grey mt-3 title is-5">No log entries found</p>
+        <p class="has-text-grey-light">Log entries will appear here as the system runs.</p>
     </div>
     {% endif %}
 </div>
 
-<style>
-.log-message {
-    font-family: 'Courier New', monospace;
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-
-pre code {
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-</style>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Toggle context visibility
-    window.toggleContext = function(id) {
-        const element = document.getElementById(id);
-        element.classList.toggle('is-hidden');
-    };
-    
-    // Copy to clipboard functionality
-    document.querySelectorAll('.copy-log').forEach(button => {
-        button.addEventListener('click', function() {
-            const logText = this.getAttribute('data-log');
-            navigator.clipboard.writeText(logText).then(() => {
-                const icon = this.querySelector('i');
-                icon.className = 'fas fa-check';
-                setTimeout(() => {
-                    icon.className = 'fas fa-copy';
-                }, 2000);
-            });
-        });
-    });
-
-    // Auto-refresh every 30 seconds
-    setTimeout(() => {
-        window.location.reload();
-    }, 30000);
-});
-</script>
+<script src="assets/logs.js"></script>
 {% endblock %} 

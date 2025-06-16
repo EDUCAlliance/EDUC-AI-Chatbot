@@ -5,36 +5,38 @@
 {% block heading %}Dashboard{% endblock %}
 
 {% block content %}
-    <div class="columns is-multiline">
-        <div class="column is-one-quarter">
-            <div class="dashboard-card">
-                <p class="heading">Documents</p>
-                <p class="title">{{ stats.docs }}</p>
-            </div>
+    <div class="dashboard-stats">
+        <div class="stat-card">
+            <p class="heading">Documents</p>
+            <p class="title">{{ stats.docs }}</p>
         </div>
-        <div class="column is-one-quarter">
-            <div class="dashboard-card">
-                <p class="heading">Embeddings</p>
-                <p class="title">{{ stats.embeddings }}</p>
-            </div>
+        <div class="stat-card">
+            <p class="heading">Embeddings</p>
+            <p class="title">{{ stats.embeddings }}</p>
         </div>
-        <div class="column is-one-quarter">
-            <div class="dashboard-card">
-                <p class="heading">Conversations</p>
-                <p class="title">{{ stats.conversations }}</p>
-            </div>
+        <div class="stat-card">
+            <p class="heading">Conversations</p>
+            <p class="title">{{ stats.conversations }}</p>
         </div>
-        <div class="column is-one-quarter">
-            <div class="dashboard-card">
-                <p class="heading">Configured Rooms</p>
-                <p class="title">{{ stats.rooms }}</p>
-            </div>
+        <div class="stat-card">
+            <p class="heading">Configured Rooms</p>
+            <p class="title">{{ stats.rooms }}</p>
         </div>
     </div>
 
-    <div class="box mt-5">
-        <h2 class="subtitle">Welcome to the Admin Panel</h2>
-        <p>From here you can manage your chatbot's documents, configure its behavior, and monitor its activity.</p>
-        <p>Use the menu on the left to navigate through the different sections.</p>
+    <div class="box">
+        <h2 class="subtitle has-text-weight-semibold">Welcome to the Admin Panel</h2>
+        <div class="content">
+            <p>From here you can manage your chatbot's documents, configure its behavior, and monitor its activity.</p>
+            <p>Use the navigation menu to explore the different sections:</p>
+            <ul>
+                <li><strong>Documents:</strong> Upload and manage training materials</li>
+                <li><strong>Models:</strong> Configure AI models and their settings</li>
+                <li><strong>System Prompt:</strong> Customize the bot's behavior and personality</li>
+                <li><strong>Onboarding:</strong> Set up initial user interaction flows</li>
+                <li><strong>RAG Settings:</strong> Fine-tune retrieval and knowledge processing</li>
+                <li><strong>Logs:</strong> Monitor system activity and debug issues</li>
+            </ul>
+        </div>
     </div>
 {% endblock %} 
