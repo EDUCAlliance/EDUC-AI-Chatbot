@@ -417,7 +417,7 @@ if ($roomConfig['onboarding_done'] == false) {
                 sendReply($reuseQuestion, $roomToken, $messageId, $ncUrl, $secret, $logger);
                 exit;
             }
-        } catch (\PDOException $e) {
+        } catch (\Throwable $e) {
             $logger->error('Failed to search for previous user config', ['error' => $e->getMessage(), 'user' => $userId]);
             // Do not exit. Just log the error and fall through to the next question,
             // making the experience consistent with the 'group' path.
