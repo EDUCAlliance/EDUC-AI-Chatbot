@@ -98,6 +98,31 @@ try {
     error_log("Room config schema migration warning: " . $e->getMessage());
 }
 
+// Ensure vector dimension is correct (4096)
+try {
+    $result = $db->query("
+        SELECT atttypmod
+        FROM pg_attribute
+        WHERE attrelid = 'bot_embeddings'::regclass
+          AND attname = 'embedding'
+    ")->fetchColumn();
+    
+    // The dimension is stored in atttypmod. For vectors, it seems to be the dimension.
+    // We check if it's not 4096.
+    if ($result && (int)$result !== 4096) {
+        $logger->warning('Incorrect vector dimension detected. Attempting to migrate...');
+        // First, delete any existing, incompatible embeddings.
+        $db->exec("DELETE FROM bot_embeddings");
+        // Now, alter the column type. This is the critical fix.
+        $db->exec("ALTER TABLE bot_embeddings ALTER COLUMN embedding TYPE vector(4096)");
+        $logger->info('Successfully migrated bot_embeddings table to 4096 dimensions.');
+    }
+} catch (\PDOException $e) {
+    // This might fail if the pg_vector extension isn't fully available or on different DB systems.
+    // We log it but don't crash the admin panel.
+    $logger->error('Could not verify/migrate vector dimensions.', ['error' => $e->getMessage()]);
+}
+
 // --- Middleware & Initial State Check ---
 $adminExists = (bool) $db->query("SELECT id FROM bot_admin LIMIT 1")->fetchColumn();
 

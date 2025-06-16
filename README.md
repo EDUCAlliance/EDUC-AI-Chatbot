@@ -1119,16 +1119,18 @@ SQLSTATE[22P02]: Invalid text representation: invalid input syntax for type bool
   - `\d bot_room_config` should show `is_group`, `mention_mode`, `onboarding_done` columns
 - If migration fails, recreate tables using `database.sql`
 
-#### 7. Memory Limit Errors
+#### 7. Vector Dimension Mismatch
 ```
-Fatal error: Allowed memory size exhausted
+SQLSTATE[22000]: Data exception: 7 ERROR: expected 1024 dimensions, not 4096
 ```
+**Cause**: The embedding model selected in the admin panel produces vectors of a certain dimension (e.g., 4096), but the database column was created with a different dimension (e.g., 1024).
 
-**Solutions:**
-- Increase PHP memory limit: `memory_limit = 512M`
-- Optimize document chunking parameters
-- Process large files in smaller batches
-- Monitor memory usage during embedding generation
+**Solution (Automatic)**:
+The admin panel now includes an **automatic migration feature**. When you load any admin page, it checks the vector dimension in your `bot_embeddings` table. If it's incorrect, the system will:
+1.  Automatically delete any old, incompatible embeddings.
+2.  Change the `embedding` column type to the correct dimension (`vector(4096)`).
+
+Simply **redeploy your app** with the latest code and **visit the admin panel**. The issue will be resolved automatically. You can then re-upload your documents.
 
 ### Debugging
 

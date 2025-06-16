@@ -36,13 +36,15 @@ CREATE TABLE IF NOT EXISTS bot_docs (
 );
 
 -- Stores vector embeddings for document chunks.
--- The embedding dimension is set to 1024 as a common default.
+-- The embedding dimension is set to 4096 as a common default.
 CREATE TABLE IF NOT EXISTS bot_embeddings (
-  doc_id INT REFERENCES bot_docs(id) ON DELETE CASCADE,
-  chunk_index INT NOT NULL,
-  embedding VECTOR(1024) NOT NULL,
+  id SERIAL PRIMARY KEY,
+  doc_id INTEGER NOT NULL REFERENCES bot_docs(id) ON DELETE CASCADE,
+  chunk_index INTEGER NOT NULL,
+  embedding vector(4096),
   text TEXT,
-  PRIMARY KEY (doc_id, chunk_index)
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(doc_id, chunk_index)
 );
 
 -- Stores the history of all conversations.
