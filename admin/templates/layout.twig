@@ -22,16 +22,16 @@
                             General
                         </p>
                         <ul class="menu-list">
-                            <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
-                            <li><a>Documents</a></li>
+                            <li><a href="{{ url_for('dashboard') }}" class="{{ currentPage == 'dashboard' ? 'is-active' : '' }}">Dashboard</a></li>
+                            <li><a href="{{ url_for('documents') }}" class="{{ currentPage == 'documents' ? 'is-active' : '' }}">Documents</a></li>
                         </ul>
                         <p class="menu-label">
                             Configuration
                         </p>
                         <ul class="menu-list">
-                            <li><a>Models</a></li>
-                            <li><a>System Prompt</a></li>
-                            <li><a>Onboarding</a></li>
+                            <li><a href="{{ url_for('models') }}" class="{{ currentPage == 'models' ? 'is-active' : '' }}">Models</a></li>
+                            <li><a href="{{ url_for('prompt') }}" class="{{ currentPage == 'prompt' ? 'is-active' : '' }}">System Prompt</a></li>
+                            <li><a href="{{ url_for('onboarding') }}" class="{{ currentPage == 'onboarding' ? 'is-active' : '' }}">Onboarding</a></li>
                         </ul>
                         <p class="menu-label">
                             Account

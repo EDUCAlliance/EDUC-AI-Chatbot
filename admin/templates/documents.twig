@@ -1,0 +1,71 @@
+{% extends "layout.twig" %}
+
+{% block title %}Manage Documents{% endblock %}
+
+{% block heading %}Documents{% endblock %}
+
+{% block content %}
+    <div class="box">
+        <h2 class="subtitle">Upload New Document</h2>
+        <form action="{{ url_for('documents-upload') }}" method="post" enctype="multipart/form-data">
+            <div class="field is-grouped">
+                <div class="control is-expanded">
+                    <div class="file has-name is-fullwidth">
+                        <label class="file-label">
+                            <input class="file-input" type="file" name="document" required>
+                            <span class="file-cta">
+                                <span class="file-icon">
+                                    <i class="fas fa-upload"></i>
+                                </span>
+                                <span class="file-label">
+                                    Choose a file…
+                                </span>
+                            </span>
+                            <span class="file-name">
+                                No file selected
+                            </span>
+                        </label>
+                    </div>
+                </div>
+                <div class="control">
+                    <button class="button is-link" type="submit">Upload and Process</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="box mt-5">
+        <h2 class="subtitle">Uploaded Documents</h2>
+        <table class="table is-fullwidth is-striped">
+            <thead>
+                <tr>
+                    <th>Filename</th>
+                    <th>Uploaded At</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in docs %}
+                <tr>
+                    <td>{{ doc.filename }}</td>
+                    <td>{{ doc.created_at|date('Y-m-d H:i:s') }}</td>
+                    <td><button class="button is-danger is-small">Delete</button></td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" class="has-text-centered">No documents have been uploaded yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <script>
+        const fileInput = document.querySelector('.file-input');
+        const fileName = document.querySelector('.file-name');
+        fileInput.onchange = () => {
+            if (fileInput.files.length > 0) {
+                fileName.textContent = fileInput.files[0].name;
+            }
+        };
+    </script>
+{% endblock %} 

@@ -1,0 +1,37 @@
+{% extends "layout.twig" %}
+
+{% block title %}Onboarding Configuration{% endblock %}
+
+{% block heading %}Onboarding Questions{% endblock %}
+
+{% block content %}
+    <div class="box">
+        <form action="{{ url_for('onboarding') }}" method="post">
+            <div class="columns">
+                <div class="column">
+                    <div class="field">
+                        <label class="label">Group Chat Questions</label>
+                        <div class="control">
+                            <textarea class="textarea" name="group_questions" rows="8" placeholder="One question per line">{{ group_questions }}</textarea>
+                        </div>
+                        <p class="help">These questions will be asked in new group chats.</p>
+                    </div>
+                </div>
+                <div class="column">
+                    <div class="field">
+                        <label class="label">Direct Message Questions</label>
+                        <div class="control">
+                            <textarea class="textarea" name="dm_questions" rows="8" placeholder="One question per line">{{ dm_questions }}</textarea>
+                        </div>
+                        <p class="help">These questions will be asked in new direct messages.</p>
+                    </div>
+                </div>
+            </div>
+             <div class="field">
+                <div class="control">
+                    <button class="button is-primary" type="submit">Save Onboarding Questions</button>
+                </div>
+            </div>
+        </form>
+    </div>
+{% endblock %} 

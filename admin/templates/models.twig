@@ -1,0 +1,32 @@
+{% extends "layout.twig" %}
+
+{% block title %}Configure Models{% endblock %}
+
+{% block heading %}AI Models{% endblock %}
+
+{% block content %}
+    <div class="box">
+        <form action="{{ url_for('models-update') }}" method="post">
+            <div class="field">
+                <label class="label">Default Chat Model</label>
+                <div class="control">
+                    <div class="select is-fullwidth">
+                        <select name="model">
+                            {% for model in models %}
+                                <option value="{{ model.id }}" {{ model.id == current_model ? 'selected' : '' }}>
+                                    {{ model.id }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <p class="help">This model will be used for all chat conversations.</p>
+            </div>
+            <div class="field">
+                <div class="control">
+                    <button class="button is-primary" type="submit">Save Default Model</button>
+                </div>
+            </div>
+        </form>
+    </div>
+{% endblock %} 

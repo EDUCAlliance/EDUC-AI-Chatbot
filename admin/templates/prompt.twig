@@ -1,0 +1,24 @@
+{% extends "layout.twig" %}
+
+{% block title %}System Prompt{% endblock %}
+
+{% block heading %}System Prompt{% endblock %}
+
+{% block content %}
+    <div class="box">
+        <form action="{{ url_for('prompt') }}" method="post">
+            <div class="field">
+                <label class="label">Global System Prompt</label>
+                <div class="control">
+                    <textarea class="textarea" name="system_prompt" rows="10" placeholder="e.g., You are a helpful assistant for the EDUC Alliance.">{{ system_prompt }}</textarea>
+                </div>
+                <p class="help">This prompt is sent to the AI at the beginning of every conversation to set its persona and instructions.</p>
+            </div>
+            <div class="field">
+                <div class="control">
+                    <button class="button is-primary" type="submit">Save Prompt</button>
+                </div>
+            </div>
+        </form>
+    </div>
+{% endblock %} 
