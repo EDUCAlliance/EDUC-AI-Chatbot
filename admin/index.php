@@ -94,7 +94,6 @@ if (!$adminExists) {
          $setupUrl = $app->getRouteCollector()->getRouteParser()->urlFor('setup');
          return $response->withHeader('Location', $setupUrl)->withStatus(302);
     });
-
             } else {
     // --- Standard Routes ---
     $app->map(['GET', 'POST'], '/login', function (Request $request, Response $response) use ($db, $twig, $app) {

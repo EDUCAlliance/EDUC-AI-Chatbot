@@ -18,7 +18,11 @@ use NextcloudBot\Helpers\Logger;
 // --- Initialization ---
 $logger = new Logger();
 $db = NextcloudBot\getDbConnection();
-$apiClient = new ApiClient(NextcloudBot\env('AI_API_KEY'), NextcloudBot\env('AI_API_ENDPOINT'), $logger);
+$apiClient = new ApiClient(
+    NextcloudBot\env('AI_API_KEY'),
+    NextcloudBot\env('AI_API_ENDPOINT', 'https://chat-ai.academiccloud.de/v1'),
+    $logger
+);
 $vectorStore = new VectorStore($db);
 $embeddingService = new EmbeddingService($apiClient, $vectorStore, $logger);
 $onboardingManager = new OnboardingManager($db);
