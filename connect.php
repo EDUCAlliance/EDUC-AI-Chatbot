@@ -115,57 +115,59 @@ $logger->info('Checking for bot mention', [
     'message' => $message
 ]);
 
-// Check if message contains the bot mention (only if not in onboarding)
-// During onboarding, we process all messages from the user
 $roomConfigStmt = $db->prepare("SELECT mention_mode, onboarding_done FROM bot_room_config WHERE room_token = ?");
 $roomConfigStmt->execute([$roomToken]);
 $roomConfigInfo = $roomConfigStmt->fetch();
 
-$shouldCheckMention = true;
-if ($roomConfigInfo && $roomConfigInfo['onboarding_done'] == false) {
-    $shouldCheckMention = false; // Skip mention check during onboarding
-    $logger->info('In onboarding mode, processing message without mention check');
-} elseif ($roomConfigInfo && $roomConfigInfo['mention_mode'] === 'always') {
-    $shouldCheckMention = false; // Always respond mode
-    $logger->info('Always respond mode, processing message without mention check');
+// Determine whether the bot should enforce mention for THIS message
+$shouldCheckMention = false; // default: no mention required
+
+if (!$roomConfigInfo) {
+    // First ever contact in this room -> mention required
+    $shouldCheckMention = true;
+} elseif ($roomConfigInfo['onboarding_done']) {
+    // Onboarding finished – respect the configured mention mode
+    $shouldCheckMention = ($roomConfigInfo['mention_mode'] ?? 'on_mention') === 'on_mention';
 }
 
-// Check for special reset command
-if (stripos($message, '((RESET))') !== false) {
-    $logger->info('Reset command detected', ['roomToken' => $roomToken, 'userId' => $userId]);
-    
-    try {
-        // Delete room configuration to trigger fresh onboarding
-        $stmt = $db->prepare("DELETE FROM bot_room_config WHERE room_token = ?");
-        $stmt->execute([$roomToken]);
-        
-        // Clear conversation history
-        $stmt = $db->prepare("DELETE FROM bot_conversations WHERE room_token = ?");
-        $stmt->execute([$roomToken]);
-        
-        $logger->info('Room reset completed', ['roomToken' => $roomToken]);
-        
-        $resetMessage = "🔄 Bot has been reset for this room! I've cleared my memory and configuration. Send me a message to start fresh onboarding.";
-        $success = sendReply($resetMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
-        
-        if (!$success) {
-            $logger->error('Failed to send reset confirmation');
-        }
-        
-    } catch (\PDOException $e) {
-        $logger->error('Failed to reset room', ['error' => $e->getMessage(), 'roomToken' => $roomToken]);
-        $errorMessage = "❌ Sorry, I couldn't reset the room due to a database error. Please try again or contact an administrator.";
-        sendReply($errorMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
-    }
-    
-    exit;
-}
-
+// If mention is required but not present, exit early
 if ($shouldCheckMention && stripos($message, '@' . $mentionName) === false) {
     $logger->info('Bot not mentioned, ignoring message', ['message' => $message, 'required_mention' => $botMention]);
     http_response_code(200);
     exit('Bot not mentioned.');
 }
+
+// --- Special RESET command -------------------------------------------------
+if (stripos($message, '((RESET))') !== false) {
+    $logger->info('Reset command detected', ['roomToken' => $roomToken, 'userId' => $userId]);
+
+    try {
+        // Delete room configuration to trigger fresh onboarding
+        $stmt = $db->prepare("DELETE FROM bot_room_config WHERE room_token = ?");
+        $stmt->execute([$roomToken]);
+
+        // Clear conversation history
+        $stmt = $db->prepare("DELETE FROM bot_conversations WHERE room_token = ?");
+        $stmt->execute([$roomToken]);
+
+        $logger->info('Room reset completed', ['roomToken' => $roomToken]);
+
+        $resetMessage = "🔄 Bot has been reset for this room! I've cleared my memory and configuration. Send me a message to start fresh onboarding.";
+        $success = sendReply($resetMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
+
+        if (!$success) {
+            $logger->error('Failed to send reset confirmation');
+        }
+
+    } catch (\PDOException $e) {
+        $logger->error('Failed to reset room', ['error' => $e->getMessage(), 'roomToken' => $roomToken]);
+        $errorMessage = "❌ Sorry, I couldn't reset the room due to a database error. Please try again or contact an administrator.";
+        sendReply($errorMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
+    }
+
+    exit;
+}
+// ---------------------------------------------------------------------------
 
 // --- 3. Room Configuration & Onboarding ---
 try {
