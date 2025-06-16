@@ -182,27 +182,27 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<div class="content-wrapper">
-    <div class="container">
-        <div class="columns">
-            <div class="column is-12">
-                <h1 class="title">Welcome to EDUC AI Bot Admin Panel</h1>
-                <p>This is the main content area of the page.</p>
-            </div>
-        </div>
-    </div>
-</div>
+
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     // Modern Navigation System
     const navbarBurger = document.querySelector('.navbar-burger');
     const sidebar = document.querySelector('.menu-sidebar');
+    const navbarMenu = document.querySelector('.navbar-menu');
     
-    if (navbarBurger && sidebar) {
-        navbarBurger.addEventListener('click', () => {
+    if (navbarBurger) {
+        navbarBurger.addEventListener('click', (e) => {
+            e.preventDefault();
             navbarBurger.classList.toggle('is-active');
-            sidebar.classList.toggle('is-active');
+            
+            if (sidebar) {
+                sidebar.classList.toggle('is-active');
+            }
+            
+            if (navbarMenu) {
+                navbarMenu.classList.toggle('is-active');
+            }
         });
     }
     
@@ -211,10 +211,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.innerWidth <= 768) {
             const isClickInsideSidebar = sidebar && sidebar.contains(event.target);
             const isClickOnBurger = navbarBurger && navbarBurger.contains(event.target);
+            const isClickInsideNavbar = navbarMenu && navbarMenu.contains(event.target);
             
-            if (!isClickInsideSidebar && !isClickOnBurger && sidebar && sidebar.classList.contains('is-active')) {
-                sidebar.classList.remove('is-active');
-                navbarBurger.classList.remove('is-active');
+            if (!isClickInsideSidebar && !isClickOnBurger && !isClickInsideNavbar) {
+                if (sidebar && sidebar.classList.contains('is-active')) {
+                    sidebar.classList.remove('is-active');
+                }
+                if (navbarBurger && navbarBurger.classList.contains('is-active')) {
+                    navbarBurger.classList.remove('is-active');
+                }
+                if (navbarMenu && navbarMenu.classList.contains('is-active')) {
+                    navbarMenu.classList.remove('is-active');
+                }
             }
         }
     });

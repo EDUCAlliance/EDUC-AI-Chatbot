@@ -2,7 +2,7 @@
 
 {% if session.admin_logged_in %}
 <!-- Top Navigation Bar -->
-<nav class="navbar is-fixed-top has-shadow" role="navigation" aria-label="main navigation">
+<nav class="navbar" role="navigation" aria-label="main navigation">
     <div class="navbar-brand">
         <div class="navbar-item">
             <div class="brand-logo">
@@ -10,26 +10,32 @@
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                 </svg>
                 <div class="brand-text">
-                    <span class="brand-name">EDUC AI Bot</span>
-                    <span class="brand-subtitle">Admin Panel</span>
+                    <div class="brand-name">EDUC AI Bot</div>
+                    <div class="brand-subtitle">Admin Panel</div>
                 </div>
             </div>
         </div>
         
-        <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navbarBasicExample">
+        <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navbarMenu">
             <span aria-hidden="true"></span>
             <span aria-hidden="true"></span>
             <span aria-hidden="true"></span>
         </a>
     </div>
 
-    <div id="navbarBasicExample" class="navbar-menu">
+    <div id="navbarMenu" class="navbar-menu">
         <div class="navbar-end">
             <div class="navbar-item has-dropdown is-hoverable">
                 <a class="navbar-link">
-                    Account
+                    <span class="icon">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                            <circle cx="12" cy="7" r="4"/>
+                        </svg>
+                    </span>
+                    <span>Account</span>
                 </a>
-                <div class="navbar-dropdown">
+                <div class="navbar-dropdown is-right">
                     <a class="navbar-item" href="{{ url_for('logout') }}">
                         <span class="icon">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -38,7 +44,7 @@
                                 <line x1="21" y1="12" x2="9" y2="12"/>
                             </svg>
                         </span>
-                        Logout
+                        <span>Logout</span>
                     </a>
                 </div>
             </div>
