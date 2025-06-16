@@ -120,10 +120,19 @@ $message = $contentData['message'] ?? '';
 echo "    Extracted message: '$message'\n";
 
 // Test mention detection
-$botMention = '@educai';
+try {
+    $mentionStmt = $db->query("SELECT mention_name FROM bot_settings WHERE id = 1");
+    $mentionResult = $mentionStmt->fetch();
+    $botMention = $mentionResult['mention_name'] ?? '@educai';
+} catch (Exception $e) {
+    $botMention = '@educai';
+    echo "    ⚠ Could not read mention from database, using default: $botMention\n";
+}
+
 $mentionName = ltrim($botMention, '@');
 $mentioned = stripos($message, '@' . $mentionName) !== false;
-echo "    Bot mention detected: " . ($mentioned ? 'YES' : 'NO') . "\n";
+echo "    Configured bot mention: $botMention\n";
+echo "    Bot mention detected in test message: " . ($mentioned ? 'YES' : 'NO') . "\n";
 
 echo "\n=== Debug Complete ===\n";
 echo "If you see errors above, fix them before testing the webhook.\n";

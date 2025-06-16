@@ -78,9 +78,9 @@ if (empty($message) || empty($roomToken) || empty($userId)) {
 }
 
 // --- Check for Bot Mention (early exit if not mentioned) ---
-$settingsStmt = $db->query("SELECT setting_key, setting_value FROM bot_settings WHERE setting_key = 'mention'");
-$mentionSetting = $settingsStmt->fetch();
-$botMention = $mentionSetting['setting_value'] ?? '@educai';
+$settingsStmt = $db->query("SELECT mention_name FROM bot_settings WHERE id = 1");
+$settings = $settingsStmt->fetch();
+$botMention = $settings['mention_name'] ?? '@educai';
 
 // Remove @ if present in the stored mention
 $mentionName = ltrim($botMention, '@');
@@ -194,12 +194,8 @@ if ($roomConfig['onboarding_done'] == false) {
     $onboardingManager->processAnswer($roomConfig, $message);
     
     // Get next question
-    $settingsStmt = $db->query("SELECT setting_key, setting_value FROM bot_settings");
-    $settingsRows = $settingsStmt->fetchAll();
-    $globalSettings = [];
-    foreach ($settingsRows as $row) {
-        $globalSettings[$row['setting_key']] = $row['setting_value'];
-    }
+    $settingsStmt = $db->query("SELECT * FROM bot_settings WHERE id = 1");
+    $globalSettings = $settingsStmt->fetch() ?: [];
     $nextStep = $onboardingManager->getNextQuestion($roomConfig, $globalSettings);
     
     $logger->info('Sending onboarding question', ['question' => $nextStep['question']]);
@@ -219,12 +215,8 @@ $stmt = $db->prepare("INSERT INTO bot_conversations (room_token, user_id, role, 
 $stmt->execute([$roomToken, $userId, $message]);
 
 // --- 5. RAG Context ---
-$settingsStmt = $db->query("SELECT setting_key, setting_value FROM bot_settings WHERE setting_key IN ('embedding_model', 'rag_top_k')");
-$settingsRows = $settingsStmt->fetchAll();
-$ragSettings = [];
-foreach ($settingsRows as $row) {
-    $ragSettings[$row['setting_key']] = $row['setting_value'];
-}
+$settingsStmt = $db->query("SELECT embedding_model, rag_top_k FROM bot_settings WHERE id = 1");
+$ragSettings = $settingsStmt->fetch();
 $embeddingModel = $ragSettings['embedding_model'] ?? 'e5-mistral-7b-instruct';
 $topK = (int)($ragSettings['rag_top_k'] ?? 3);
 
@@ -254,15 +246,8 @@ $historyStmt->execute([$roomToken]);
 $history = array_reverse($historyStmt->fetchAll());
 
 // Fetch system prompt and model
-$settingsStmt = $db->query("SELECT setting_key, setting_value FROM bot_settings WHERE setting_key IN ('system_prompt', 'default_model')");
-$settingsRows = $settingsStmt->fetchAll();
-$globalSettings = [
-    'system_prompt' => 'You are a helpful assistant.',
-    'default_model' => 'meta-llama-3.1-8b-instruct'
-];
-foreach ($settingsRows as $row) {
-    $globalSettings[$row['setting_key']] = $row['setting_value'];
-}
+$settingsStmt = $db->query("SELECT system_prompt, default_model FROM bot_settings WHERE id = 1");
+$globalSettings = $settingsStmt->fetch() ?: ['system_prompt' => 'You are a helpful assistant.', 'default_model' => 'meta-llama-3.1-8b-instruct'];
 $systemPrompt = $globalSettings['system_prompt'];
 $model = $globalSettings['default_model'];
 

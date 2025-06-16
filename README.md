@@ -50,7 +50,8 @@ The EDUC AI TalkBot is a comprehensive chatbot solution designed to integrate se
 - **Document Management**: Upload, view, and delete knowledge base documents
 - **Model Configuration**: Select and configure AI models
 - **System Prompt Editor**: Customize the AI's behavior and personality
-- **Onboarding Setup**: Configure welcome messages and initial questions
+- **Onboarding Setup**: Configure welcome messages, bot mentions, and initial questions
+- **Bot Mention Control**: Set custom mention names to prevent spam and control bot activation
 - **RAG Settings**: Fine-tune retrieval and generation parameters
 - **User Authentication**: Secure access with password protection
 - **Responsive Design**: Works on desktop and mobile devices
@@ -249,8 +250,20 @@ The webhook endpoint must be accessible at:
 https://your-domain.com/connect.php
 ```
 
-#### 6. Bot Mention
-By default, the bot responds when mentioned with `@educai`. This can be configured in the admin panel under "Onboarding Configuration".
+#### 6. Bot Mention Configuration
+The bot mention can be customized in the admin panel:
+
+1. Navigate to the **Onboarding Configuration** page
+2. Set the **Bot Mention Name** field (e.g., `@educai`, `@assistant`, `@help`)
+3. Save the configuration
+
+**Usage Examples:**
+- `@educai explain machine learning` ✓
+- `Can you @educai help me with this?` ✓  
+- `@EDUCAI what is AI?` ✓ (case insensitive)
+- `Hello everyone` ✗ (no mention - bot ignores)
+
+This prevents the bot from responding to every message in busy chat rooms.
 
 ### Advanced Configuration
 
@@ -1078,7 +1091,8 @@ POST /connect.php HTTP/1.1" 400 507
 
 **Common Causes:**
 - Wrong webhook payload structure - check if message is JSON-encoded
-- Missing bot mention - ensure message contains `@educai` (or configured mention)
+- Missing bot mention - ensure message contains the configured mention (check admin panel)
+- Incorrect mention format - verify mention name in database: `SELECT mention_name FROM bot_settings WHERE id = 1`
 - Database connection issues
 - Missing environment variables
 
@@ -1088,7 +1102,18 @@ POST /connect.php HTTP/1.1" 400 507
 3. Test webhook manually: `php test_webhook.php`
 4. Verify bot registration: `sudo -u www-data php occ talk:bot:list`
 
-#### 6. Memory Limit Errors
+#### 6. Database Schema Issues
+```
+SQLSTATE[42703]: Undefined column: column "setting_key" does not exist
+```
+
+**Solutions:**
+- The database schema was updated to use a singleton pattern for bot_settings
+- Access the admin panel once to trigger automatic schema migration
+- Or manually run: `psql your_database < fix_database_schema.sql`
+- Verify schema: `\d bot_settings` in psql should show `mention_name` column
+
+#### 7. Memory Limit Errors
 ```
 Fatal error: Allowed memory size exhausted
 ```

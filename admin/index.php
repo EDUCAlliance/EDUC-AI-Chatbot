@@ -51,18 +51,26 @@ try {
     }
 }
 
-// Add new RAG setting columns if they don't exist
-$db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS embedding_model TEXT DEFAULT 'e5-mistral-7b-instruct'");
-$db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_top_k INTEGER DEFAULT 3");
-$db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_chunk_size INTEGER DEFAULT 250");
-$db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_chunk_overlap INTEGER DEFAULT 25");
+// Add new columns if they don't exist (for schema migration)
+try {
+    $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS mention_name TEXT DEFAULT '@educai'");
+    $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS embedding_model TEXT DEFAULT 'e5-mistral-7b-instruct'");
+    $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_top_k INTEGER DEFAULT 3");
+    $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_chunk_size INTEGER DEFAULT 250");
+    $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_chunk_overlap INTEGER DEFAULT 25");
+} catch (\PDOException $e) {
+    // Schema migration might fail on some PostgreSQL versions, but that's okay if columns already exist
+    error_log("Schema migration warning: " . $e->getMessage());
+}
 
-// Initialize default bot mention if not exists
-$mentionExists = $db->prepare("SELECT COUNT(*) FROM bot_settings WHERE setting_key = 'mention'");
-$mentionExists->execute();
-if ($mentionExists->fetchColumn() == 0) {
-    $stmt = $db->prepare("INSERT INTO bot_settings (setting_key, setting_value, description) VALUES (?, ?, ?)");
-    $stmt->execute(['mention', '@educai', 'Bot mention name that users must use to trigger responses']);
+// Initialize default bot settings if not exists
+$settingsExist = $db->query("SELECT COUNT(*) FROM bot_settings WHERE id = 1")->fetchColumn();
+if ($settingsExist == 0) {
+    $stmt = $db->prepare("INSERT INTO bot_settings (id, mention_name) VALUES (1, ?)");
+    $stmt->execute(['@educai']);
+} else {
+    // Ensure mention_name is set for existing records
+    $db->exec("UPDATE bot_settings SET mention_name = '@educai' WHERE id = 1 AND mention_name IS NULL");
 }
 
 // --- Middleware & Initial State Check ---
@@ -195,23 +203,17 @@ $app->map(['GET', 'POST'], '/onboarding', function (Request $request, Response $
         $groupJson = json_encode(array_filter(array_map('trim', explode("\n", $groupQuestions))));
         $dmJson = json_encode(array_filter(array_map('trim', explode("\n", $dmQuestions))));
         
-        // Update or insert bot mention setting
-        $stmt = $db->prepare("INSERT INTO bot_settings (setting_key, setting_value) VALUES (?, ?) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value");
-        $stmt->execute(['mention', $botMention]);
-        
-        $stmt = $db->prepare("UPDATE bot_settings SET onboarding_group_questions = ?, onboarding_dm_questions = ? WHERE id = 1");
-        $stmt->execute([$groupJson, $dmJson]);
+        // Update bot mention and onboarding questions
+        $stmt = $db->prepare("UPDATE bot_settings SET mention_name = ?, onboarding_group_questions = ?, onboarding_dm_questions = ? WHERE id = 1");
+        $stmt->execute([$botMention, $groupJson, $dmJson]);
         return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('onboarding'))->withStatus(302);
     }
     
     // Get current settings
-    $settings = $db->query("SELECT onboarding_group_questions, onboarding_dm_questions FROM bot_settings WHERE id = 1")->fetch();
-    $mentionStmt = $db->prepare("SELECT setting_value FROM bot_settings WHERE setting_key = 'mention'");
-    $mentionStmt->execute();
-    $mentionSetting = $mentionStmt->fetch();
+    $settings = $db->query("SELECT mention_name, onboarding_group_questions, onboarding_dm_questions FROM bot_settings WHERE id = 1")->fetch();
     
     return $twig->render($response, 'onboarding.twig', [
-        'bot_mention' => $mentionSetting['setting_value'] ?? '@educai',
+        'bot_mention' => $settings['mention_name'] ?? '@educai',
         'group_questions' => implode("\n", json_decode($settings['onboarding_group_questions'] ?? '[]', true)), 
         'dm_questions' => implode("\n", json_decode($settings['onboarding_dm_questions'] ?? '[]', true)), 
         'currentPage' => 'onboarding'
