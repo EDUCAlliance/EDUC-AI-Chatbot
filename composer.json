@@ -1,57 +1,54 @@
 {
-    "name": "educ/nextcloud-ai-chatbot-enhanced",
-    "description": "Enhanced AI-powered Nextcloud chatbot with PostgreSQL and advanced RAG capabilities",
+    "name": "educ/nextcloud-ai-chatbot",
+    "description": "Nextcloud AI Chatbot with RAG support and admin panel",
     "type": "project",
     "license": "MIT",
-    "authors": [
-        {
-            "name": "EDUC Alliance",
-            "email": "contact@educ-alliance.org"
-        }
-    ],
-    "autoload": {
-        "psr-4": {
-            "EDUC\\": "src/"
-        }
-    },
     "require": {
         "php": ">=8.1",
+        "slim/slim": "^4.12",
+        "slim/psr7": "^1.6",
+        "twig/twig": "^3.7",
+        "openai-php/client": "^0.8",
+        "vlucas/phpdotenv": "^5.5",
+        "symfony/polyfill-mbstring": "^1.28",
+        "symfony/polyfill-ctype": "^1.28",
+        "ext-pdo": "*",
+        "ext-pgsql": "*",
         "ext-curl": "*",
         "ext-json": "*",
-        "ext-pdo": "*",
-        "ext-pdo_pgsql": "*",
-        "ext-pgsql": "*",
-        "ext-fileinfo": "*",
-        "ext-zip": "*",
-        "ext-mbstring": "*",
-        "ext-gd": "*",
-        "ext-openssl": "*",
-        "ramsey/uuid": "^4.7"
+        "ext-mbstring": "*"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.0"
+        "phpunit/phpunit": "^10.3",
+        "phpstan/phpstan": "^1.10"
+    },
+    "autoload": {
+        "psr-4": {
+            "EducBot\\": "apps/nextcloud-bot/src/"
+        },
+        "files": [
+            "apps/nextcloud-bot/src/bootstrap.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "EducBot\\Tests\\": "apps/nextcloud-bot/tests/"
+        }
     },
     "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse --level=8 apps/nextcloud-bot/src",
         "post-install-cmd": [
-            "@php -r \"echo 'PHP Version: ' . phpversion() . PHP_EOL;\"",
-            "@php -r \"echo 'Available PDO drivers: ' . implode(', ', PDO::getAvailableDrivers()) . PHP_EOL;\"",
-            "@php -r \"echo 'PostgreSQL PDO extension loaded: ' . (extension_loaded('pdo_pgsql') ? 'YES' : 'NO') . PHP_EOL;\"",
-            "@php -r \"echo 'PostgreSQL extension loaded: ' . (extension_loaded('pgsql') ? 'YES' : 'NO') . PHP_EOL;\"",
-            "mkdir -p uploads cache logs",
-            "chmod 755 uploads cache logs",
-            "@php -r \"echo 'Directories created successfully' . PHP_EOL;\""
-        ],
-        "check-env": [
-            "@php -r \"echo 'Environment Check:' . PHP_EOL;\"",
-            "@php -r \"echo 'CLOUDRON_POSTGRESQL_HOST: ' . (getenv('CLOUDRON_POSTGRESQL_HOST') ?: 'NOT SET') . PHP_EOL;\"",
-            "@php -r \"echo 'CLOUDRON_POSTGRESQL_DATABASE: ' . (getenv('CLOUDRON_POSTGRESQL_DATABASE') ?: 'NOT SET') . PHP_EOL;\"",
-            "@php -r \"echo 'CLOUDRON_POSTGRESQL_USERNAME: ' . (getenv('CLOUDRON_POSTGRESQL_USERNAME') ?: 'NOT SET') . PHP_EOL;\"",
-            "@php -r \"echo 'PostgreSQL extensions: pdo_pgsql=' . (extension_loaded('pdo_pgsql') ? 'YES' : 'NO') . ', pgsql=' . (extension_loaded('pgsql') ? 'YES' : 'NO') . PHP_EOL;\""
+            "php -r \"if (!file_exists('.env')) { copy('.env.example', '.env'); }\""
         ]
     },
     "config": {
         "optimize-autoloader": true,
         "sort-packages": true,
-        "platform-check": false
-    }
+        "allow-plugins": {
+            "*": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 } 
