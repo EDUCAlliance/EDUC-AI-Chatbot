@@ -114,12 +114,14 @@ class OnboardingManager
                 WHERE room_token = :room_token";
         
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([
-            ':is_group' => $roomConfig['is_group'],
-            ':mention_mode' => $roomConfig['mention_mode'],
-            ':meta' => json_encode($roomConfig['meta']),
-            ':room_token' => $roomConfig['room_token']
-        ]);
+
+        // Explicitly bind the boolean value for PostgreSQL compatibility
+        $stmt->bindValue(':is_group', $roomConfig['is_group'], \PDO::PARAM_BOOL);
+        $stmt->bindValue(':mention_mode', $roomConfig['mention_mode'] ?? 'on_mention');
+        $stmt->bindValue(':meta', json_encode($roomConfig['meta']));
+        $stmt->bindValue(':room_token', $roomConfig['room_token']);
+
+        $stmt->execute();
     }
 
     private function markOnboardingAsDone(string $roomToken): void
