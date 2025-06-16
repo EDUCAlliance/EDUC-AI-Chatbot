@@ -309,8 +309,53 @@ $logger->info('Room config loaded', [
 
 if ($roomConfig['onboarding_done'] == false) {
     $logger->info('Processing onboarding for room', ['roomToken' => $roomToken, 'message' => $message]);
-    
-    // Determine current onboarding stage
+
+    // -------------- REUSE FLOW HANDLING ------------------
+    if (($roomConfig['is_group'] ?? true) === false) {
+        // Direct Message room – check if we are in the reuse confirmation sub-flow
+        $reuseState = $roomConfig['meta']['reuse_state'] ?? null;
+        if ($reuseState === 'pending') {
+            $answer = strtolower(trim($message));
+            if (in_array($answer, ['use', 'yes', 'y'])) {
+                // User chose to reuse previous settings
+                $reuseData = $roomConfig['meta']['reuse_data'] ?? [];
+                $roomConfig['mention_mode'] = $reuseData['mention_mode'] ?? $roomConfig['mention_mode'];
+                $roomConfig['meta']['answers'] = $reuseData['answers'] ?? [];
+                $roomConfig['meta']['reuse_state'] = 'accepted';
+                // Mark onboarding as done
+                $roomConfig['onboarding_done'] = true;
+                // Persist changes
+                $stmt = $db->prepare("UPDATE bot_room_config SET mention_mode = :mention_mode, meta = :meta, onboarding_done = TRUE WHERE room_token = :room_token");
+                $stmt->execute([
+                    ':mention_mode' => $roomConfig['mention_mode'],
+                    ':meta' => json_encode($roomConfig['meta']),
+                    ':room_token' => $roomConfig['room_token']
+                ]);
+
+                $replyText = "✅ Previous onboarding answers applied. I'm ready to help you now!";
+                sendReply($replyText, $roomToken, $messageId, $ncUrl, $secret, $logger);
+                exit;
+            } elseif (in_array($answer, ['reset', 'no', 'n'])) {
+                // User wants to reset – discard reuse data and continue fresh onboarding (stage 1)
+                $roomConfig['meta']['reuse_state'] = 'declined';
+                unset($roomConfig['meta']['reuse_data']);
+                // Persist meta update only
+                $stmt = $db->prepare("UPDATE bot_room_config SET meta = :meta WHERE room_token = :room_token");
+                $stmt->execute([
+                    ':meta' => json_encode($roomConfig['meta']),
+                    ':room_token' => $roomConfig['room_token']
+                ]);
+                // Continue with normal onboarding below
+            } else {
+                // Ask again if unclear
+                sendReply("Please reply with 'use' to reuse your previous settings or 'reset' to start over.", $roomToken, $messageId, $ncUrl, $secret, $logger);
+                exit;
+            }
+        }
+    }
+    // -------------- END REUSE FLOW HANDLING --------------
+
+    // Determine current onboarding stage (may have been updated in a previous run)
     $currentStage = $roomConfig['meta']['stage'] ?? 0;
 
     // If this is the very first touch (stage 0, no answers yet), we have not asked ANY question.
@@ -330,6 +375,36 @@ if ($roomConfig['onboarding_done'] == false) {
 
     // For all subsequent steps we first *process* the previous answer
     $onboardingManager->processAnswer($roomConfig, $message);
+
+    // AFTER processing answer, check if we've just identified a DM and should search for previous onboarding data
+    if (($roomConfig['is_group'] ?? true) === false && $roomConfig['meta']['stage'] === 1 && !isset($roomConfig['meta']['reuse_state'])) {
+        // Search for an earlier DM room by the same user that has completed onboarding
+        $sql = "SELECT brc.* FROM bot_room_config brc
+                JOIN bot_conversations bc ON bc.room_token = brc.room_token AND bc.user_id = :user
+                WHERE brc.is_group = FALSE AND brc.onboarding_done = TRUE
+                ORDER BY brc.updated_at DESC LIMIT 1";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([':user' => $userId]);
+        $prevConfig = $stmt->fetch();
+        if ($prevConfig) {
+            $prevMeta = json_decode($prevConfig['meta'], true);
+            $roomConfig['meta']['reuse_state'] = 'pending';
+            $roomConfig['meta']['reuse_data'] = [
+                'mention_mode' => $prevConfig['mention_mode'],
+                'answers' => $prevMeta['answers'] ?? []
+            ];
+            // Save meta
+            $stmt2 = $db->prepare("UPDATE bot_room_config SET meta = :meta WHERE room_token = :room_token");
+            $stmt2->execute([
+                ':meta' => json_encode($roomConfig['meta']),
+                ':room_token' => $roomConfig['room_token']
+            ]);
+
+            $reuseQuestion = "I found previous onboarding answers for you. Reply 'use' to reuse them or 'reset' to start fresh.";
+            sendReply($reuseQuestion, $roomToken, $messageId, $ncUrl, $secret, $logger);
+            exit;
+        }
+    }
 
     // Get the next question (or completion message)
     $settingsStmt = $db->query("SELECT * FROM bot_settings WHERE id = 1");
