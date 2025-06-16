@@ -576,198 +576,7 @@ function removeQuestion(button) {
 include __DIR__ . '/includes/footer.php';
 ?>
 
-// Initialize components
-$db = \EDUC\Database\Database::getInstance();
-$settings = $db->getAllSettings();
 
-// Initialize LLM client for model fetching
-$llmClient = null;
-$availableModels = [];
-$llmClientError = null;
-
-try {
-    $apiKey = \EDUC\Core\Environment::get('AI_API_KEY');
-    $apiEndpoint = \EDUC\Core\Environment::get('AI_API_ENDPOINT');
-    
-    if (!empty($apiKey) && !empty($apiEndpoint)) {
-        $llmClient = new \EDUC\API\LLMClient(
-            $apiKey,
-            $apiEndpoint,
-            \EDUC\Core\Environment::get('EMBEDDING_API_ENDPOINT'),
-            \EDUC\Core\Environment::get('MODELS_API_ENDPOINT')
-        );
-        $availableModels = $llmClient->getAvailableModels();
-    } else {
-        $missingVars = [];
-        if (empty($apiKey)) $missingVars[] = 'AI_API_KEY';
-        if (empty($apiEndpoint)) $missingVars[] = 'AI_API_ENDPOINT';
-        $llmClientError = 'Missing environment variables: ' . implode(', ', $missingVars);
-    }
-} catch (Exception $e) {
-    $llmClientError = $e->getMessage();
-    \EDUC\Utils\Logger::error('Failed to initialize LLM client in settings', ['error' => $e->getMessage()]);
-}
-
-// Handle form submissions
-$message = '';
-$messageType = 'info';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try {
-        // CSRF protection
-        if (!isset($_POST['csrf_token']) || !\EDUC\Utils\Security::validateCSRFToken($_POST['csrf_token'])) {
-            throw new Exception('Invalid CSRF token');
-        }
-        
-        $action = $_POST['action'] ?? '';
-        
-        switch ($action) {
-            case 'save_general':
-                handleGeneralSettings($db, $_POST);
-                $message = 'General settings saved successfully!';
-                $messageType = 'success';
-                break;
-                
-            case 'save_ai':
-                handleAISettings($db, $_POST);
-                $message = 'AI settings saved successfully!';
-                $messageType = 'success';
-                break;
-                
-            case 'save_onboarding':
-                handleOnboardingSettings($db, $_POST);
-                $message = 'Onboarding settings saved successfully!';
-                $messageType = 'success';
-                break;
-                
-            case 'test_api':
-                $result = testAPIConnection();
-                $message = $result['message'];
-                $messageType = $result['type'];
-                break;
-                
-            default:
-                throw new Exception('Unknown action');
-        }
-        
-        // Refresh settings after changes
-        $settings = $db->getAllSettings();
-        
-    } catch (Exception $e) {
-        \EDUC\Utils\Logger::error('Settings page error', ['error' => $e->getMessage()]);
-        $message = 'Error: ' . $e->getMessage();
-        $messageType = 'error';
-    }
-}
-
-/**
- * Handle general settings
- */
-function handleGeneralSettings(\EDUC\Database\Database $db, array $postData): void {
-    $generalSettings = [
-        'bot_mention',
-        'debug_mode',
-        'welcome_message',
-        'timezone'
-    ];
-    
-    foreach ($generalSettings as $setting) {
-        if (isset($postData[$setting])) {
-            $value = $postData[$setting];
-            if ($setting === 'debug_mode') {
-                $value = isset($postData[$setting]) ? 'true' : 'false';
-            }
-            $db->setSetting($setting, $value);
-        }
-    }
-    
-    \EDUC\Utils\Logger::info('General settings updated');
-}
-
-/**
- * Handle AI settings
- */
-function handleAISettings(\EDUC\Database\Database $db, array $postData): void {
-    $aiSettings = [
-        'system_prompt',
-        'model',
-        'temperature',
-        'max_tokens',
-        'top_p'
-    ];
-    
-    foreach ($aiSettings as $setting) {
-        if (isset($postData[$setting])) {
-            $value = $postData[$setting];
-            $db->setSetting($setting, $value);
-        }
-    }
-    
-    \EDUC\Utils\Logger::info('AI settings updated');
-}
-
-/**
- * Handle onboarding settings
- */
-function handleOnboardingSettings(\EDUC\Database\Database $db, array $postData): void {
-    // Handle user onboarding questions
-    if (isset($postData['user_onboarding_questions'])) {
-        $questions = array_filter($postData['user_onboarding_questions']);
-        $db->setSetting('user_onboarding_questions', json_encode($questions));
-    }
-    
-    // Handle group onboarding questions
-    if (isset($postData['group_onboarding_questions'])) {
-        $questions = array_filter($postData['group_onboarding_questions']);
-        $db->setSetting('group_onboarding_questions', json_encode($questions));
-    }
-    
-    \EDUC\Utils\Logger::info('Onboarding settings updated');
-}
-
-/**
- * Test API connection
- */
-function testAPIConnection(): array {
-    try {
-        $apiKey = \EDUC\Core\Environment::get('AI_API_KEY');
-        $apiEndpoint = \EDUC\Core\Environment::get('AI_API_ENDPOINT');
-        
-        if (!$apiKey || !$apiEndpoint) {
-            return [
-                'message' => 'Missing AI_API_KEY or AI_API_ENDPOINT environment variables',
-                'type' => 'error'
-            ];
-        }
-        
-        $llmClient = new \EDUC\API\LLMClient(
-            $apiKey,
-            $apiEndpoint,
-            \EDUC\Core\Environment::get('EMBEDDING_API_ENDPOINT'),
-            \EDUC\Core\Environment::get('MODELS_API_ENDPOINT')
-        );
-        
-        $result = $llmClient->testConnection();
-        
-        if ($result['status'] === 'success') {
-            return [
-                'message' => "API connection successful! Found {$result['models_count']} models",
-                'type' => 'success'
-            ];
-        } else {
-            return [
-                'message' => 'API connection failed: ' . $result['error'],
-                'type' => 'error'
-            ];
-        }
-        
-    } catch (Exception $e) {
-        return [
-            'message' => 'API test failed: ' . $e->getMessage(),
-            'type' => 'error'
-        ];
-    }
-}
 
 $csrfToken = \EDUC\Utils\Security::generateCSRFToken();
 
@@ -998,7 +807,8 @@ include __DIR__ . '/includes/header.php';
                                 <div id="user-questions">
                                     <?php 
                                     $userQuestions = json_decode($settings['user_onboarding_questions']['value'] ?? '[]', true);
-                                    foreach ($userQuestions as $i => $question): 
+                                    if ($userQuestions) {
+                                        foreach ($userQuestions as $i => $question): 
                                     ?>
                                         <div class="input-group mb-2">
                                             <input type="text" class="form-control" name="user_onboarding_questions[]" 
@@ -1007,7 +817,10 @@ include __DIR__ . '/includes/header.php';
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </div>
-                                    <?php endforeach; ?>
+                                    <?php 
+                                        endforeach;
+                                    }
+                                    ?>
                                 </div>
                                 <button type="button" class="btn btn-outline-primary btn-sm" onclick="addUserQuestion()">
                                     <i class="bi bi-plus"></i> Add Question
@@ -1020,7 +833,8 @@ include __DIR__ . '/includes/header.php';
                                 <div id="group-questions">
                                     <?php 
                                     $groupQuestions = json_decode($settings['group_onboarding_questions']['value'] ?? '[]', true);
-                                    foreach ($groupQuestions as $i => $question): 
+                                    if ($groupQuestions) {
+                                        foreach ($groupQuestions as $i => $question): 
                                     ?>
                                         <div class="input-group mb-2">
                                             <input type="text" class="form-control" name="group_onboarding_questions[]" 
@@ -1029,7 +843,10 @@ include __DIR__ . '/includes/header.php';
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </div>
-                                    <?php endforeach; ?>
+                                    <?php 
+                                        endforeach;
+                                    }
+                                    ?>
                                 </div>
                                 <button type="button" class="btn btn-outline-primary btn-sm" onclick="addGroupQuestion()">
                                     <i class="bi bi-plus"></i> Add Question
