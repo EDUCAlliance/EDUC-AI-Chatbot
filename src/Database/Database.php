@@ -129,6 +129,7 @@ class Database {
         $this->createEmbeddingsTable();
         $this->createFilesTable();
         $this->createModelsTable();
+        $this->createAdminUsersTable();
         
         // Insert default settings if not exists
         $this->insertDefaultSettings();
@@ -285,6 +286,32 @@ class Database {
             last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )";
         $this->connection->exec($sql);
+    }
+    
+    /**
+     * Create admin users table
+     */
+    private function createAdminUsersTable(): void {
+        $sql = "CREATE TABLE IF NOT EXISTS {$this->tablePrefix}admin_users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(255) UNIQUE NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            email VARCHAR(255),
+            full_name VARCHAR(255),
+            role VARCHAR(50) DEFAULT 'admin',
+            is_active BOOLEAN DEFAULT TRUE,
+            last_login TIMESTAMP NULL,
+            password_reset_token VARCHAR(255) NULL,
+            password_reset_expires TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )";
+        $this->connection->exec($sql);
+        
+        // Create index for username lookup
+        $indexSql = "CREATE INDEX IF NOT EXISTS {$this->tablePrefix}admin_users_username_idx 
+                    ON {$this->tablePrefix}admin_users (username, is_active)";
+        $this->connection->exec($indexSql);
     }
     
     /**
@@ -495,6 +522,158 @@ class Database {
      */
     public function commit(): bool {
         return $this->connection->commit();
+    }
+    
+    // ==================== Admin User Management ====================
+    
+    /**
+     * Check if any admin users exist
+     */
+    public function hasAdminUsers(): bool {
+        $stmt = $this->connection->query(
+            "SELECT COUNT(*) FROM {$this->tablePrefix}admin_users WHERE is_active = TRUE"
+        );
+        return $stmt->fetchColumn() > 0;
+    }
+    
+    /**
+     * Create admin user
+     */
+    public function createAdminUser(string $username, string $password, string $email = '', string $fullName = ''): int {
+        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+        
+        $stmt = $this->connection->prepare(
+            "INSERT INTO {$this->tablePrefix}admin_users (username, password_hash, email, full_name) 
+             VALUES (?, ?, ?, ?) RETURNING id"
+        );
+        $stmt->execute([$username, $passwordHash, $email, $fullName]);
+        
+        return $stmt->fetchColumn();
+    }
+    
+    /**
+     * Authenticate admin user
+     */
+    public function authenticateAdmin(string $username, string $password): ?array {
+        $stmt = $this->connection->prepare(
+            "SELECT id, username, password_hash, email, full_name, role 
+             FROM {$this->tablePrefix}admin_users 
+             WHERE username = ? AND is_active = TRUE"
+        );
+        $stmt->execute([$username]);
+        $user = $stmt->fetch();
+        
+        if ($user && password_verify($password, $user['password_hash'])) {
+            // Update last login
+            $this->updateAdminLastLogin($user['id']);
+            
+            // Return user data without password hash
+            unset($user['password_hash']);
+            return $user;
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Update admin last login
+     */
+    public function updateAdminLastLogin(int $userId): void {
+        $stmt = $this->connection->prepare(
+            "UPDATE {$this->tablePrefix}admin_users 
+             SET last_login = CURRENT_TIMESTAMP 
+             WHERE id = ?"
+        );
+        $stmt->execute([$userId]);
+    }
+    
+    /**
+     * Get admin user by ID
+     */
+    public function getAdminUser(int $userId): ?array {
+        $stmt = $this->connection->prepare(
+            "SELECT id, username, email, full_name, role, is_active, last_login, created_at 
+             FROM {$this->tablePrefix}admin_users 
+             WHERE id = ?"
+        );
+        $stmt->execute([$userId]);
+        return $stmt->fetch() ?: null;
+    }
+    
+    /**
+     * Get all admin users
+     */
+    public function getAllAdminUsers(): array {
+        $stmt = $this->connection->query(
+            "SELECT id, username, email, full_name, role, is_active, last_login, created_at 
+             FROM {$this->tablePrefix}admin_users 
+             ORDER BY created_at ASC"
+        );
+        return $stmt->fetchAll();
+    }
+    
+    /**
+     * Update admin user
+     */
+    public function updateAdminUser(int $userId, array $data): bool {
+        $fields = [];
+        $params = [];
+        
+        if (isset($data['username'])) {
+            $fields[] = 'username = ?';
+            $params[] = $data['username'];
+        }
+        
+        if (isset($data['email'])) {
+            $fields[] = 'email = ?';
+            $params[] = $data['email'];
+        }
+        
+        if (isset($data['full_name'])) {
+            $fields[] = 'full_name = ?';
+            $params[] = $data['full_name'];
+        }
+        
+        if (isset($data['password']) && !empty($data['password'])) {
+            $fields[] = 'password_hash = ?';
+            $params[] = password_hash($data['password'], PASSWORD_DEFAULT);
+        }
+        
+        if (isset($data['is_active'])) {
+            $fields[] = 'is_active = ?';
+            $params[] = $data['is_active'];
+        }
+        
+        if (empty($fields)) {
+            return false;
+        }
+        
+        $fields[] = 'updated_at = CURRENT_TIMESTAMP';
+        $params[] = $userId;
+        
+        $sql = "UPDATE {$this->tablePrefix}admin_users SET " . implode(', ', $fields) . " WHERE id = ?";
+        $stmt = $this->connection->prepare($sql);
+        
+        return $stmt->execute($params);
+    }
+    
+    /**
+     * Delete admin user
+     */
+    public function deleteAdminUser(int $userId): bool {
+        // Don't allow deletion if it's the only admin
+        $adminCount = $this->connection->query(
+            "SELECT COUNT(*) FROM {$this->tablePrefix}admin_users WHERE is_active = TRUE"
+        )->fetchColumn();
+        
+        if ($adminCount <= 1) {
+            throw new Exception('Cannot delete the only admin user');
+        }
+        
+        $stmt = $this->connection->prepare(
+            "DELETE FROM {$this->tablePrefix}admin_users WHERE id = ?"
+        );
+        return $stmt->execute([$userId]);
     }
     
     /**
