@@ -1,6 +1,6 @@
 /* Modern Admin Panel - EDUC AI Bot */
 
-@import url('https://cdn.jsdelivr.net/npm/bulma@1.0.0/css/bulma.min.css');
+@import url('bulma.min.css');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
