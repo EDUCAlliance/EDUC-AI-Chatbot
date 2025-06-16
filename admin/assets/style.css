@@ -1195,4 +1195,65 @@ html {
 .message.is-warning {
     background: linear-gradient(135deg, #fffbeb, #fef3c7);
     border-color: var(--warning-color);
+}
+
+/* EDUC Brand Enhancement Effects */
+.box:hover {
+    border-color: var(--educ-green);
+    box-shadow: 0 8px 25px rgba(74, 222, 128, 0.1);
+}
+
+.menu-list a:hover .icon {
+    color: var(--educ-green);
+    transform: scale(1.1);
+}
+
+/* Special EDUC gradient background for specific sections */
+.educ-gradient-bg {
+    background: linear-gradient(135deg, 
+        var(--educ-green) 0%,
+        var(--educ-pink) 25%,
+        var(--educ-coral) 50%,
+        var(--educ-purple) 75%,
+        var(--educ-green) 100%);
+    background-size: 400% 400%;
+    animation: educGradientShift 10s ease-in-out infinite;
+}
+
+@keyframes educGradientShift {
+    0%, 100% { background-position: 0% 50%; }
+    25% { background-position: 50% 0%; }
+    50% { background-position: 100% 50%; }
+    75% { background-position: 50% 100%; }
+}
+
+/* EDUC accent borders */
+.educ-accent-border {
+    border-left: 4px solid;
+    border-image: linear-gradient(135deg, var(--educ-green), var(--educ-pink), var(--educ-purple)) 1;
+}
+
+/* Enhanced brand logo animation */
+.brand-logo svg rect {
+    transition: all 0.3s ease;
+}
+
+.brand-logo:hover svg rect:nth-child(1) {
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 8px rgba(74, 222, 128, 0.5));
+}
+
+.brand-logo:hover svg rect:nth-child(3) {
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 8px rgba(244, 114, 182, 0.5));
+}
+
+.brand-logo:hover svg rect:nth-child(5) {
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 8px rgba(251, 113, 133, 0.5));
+}
+
+.brand-logo:hover svg rect:nth-child(7) {
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.5));
 } 
