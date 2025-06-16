@@ -258,4 +258,100 @@ $app->map(['GET', 'POST'], '/rag-settings', function (Request $request, Response
     return $twig->render($response, 'rag_settings.twig', ['settings' => $settings, 'embeddingModels' => $embeddingModels, 'currentPage' => 'rag-settings']);
 })->setName('rag-settings')->add($authMiddleware);
 
+// Helper function to read log entries
+function getLogEntries(int $limit = 100): array {
+    $logDir = APP_ROOT . '/logs';
+    $logFile = $logDir . '/' . date('Y-m-d') . '.log';
+    
+    if (!file_exists($logFile)) {
+        return [];
+    }
+    
+    $lines = file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if (!$lines) {
+        return [];
+    }
+    
+    // Get last N lines
+    $lines = array_slice($lines, -$limit);
+    $logs = [];
+    
+    foreach (array_reverse($lines) as $line) {
+        // Parse log format: [2024-06-16 14:25:15] [INFO] Message {context}
+        if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] \[(\w+)\] (.+)$/', $line, $matches)) {
+            $timestamp = $matches[1];
+            $level = $matches[2];
+            $messageAndContext = $matches[3];
+            
+            // Try to separate message from JSON context
+            $message = $messageAndContext;
+            $context = null;
+            
+            // Look for JSON context at the end
+            if (preg_match('/^(.+?) (\{.+\})$/', $messageAndContext, $contextMatches)) {
+                $message = $contextMatches[1];
+                $contextJson = $contextMatches[2];
+                
+                // Try to decode and pretty-print JSON
+                $contextData = json_decode($contextJson, true);
+                if ($contextData !== null) {
+                    $context = json_encode($contextData, JSON_PRETTY_PRINT);
+                } else {
+                    $context = $contextJson;
+                }
+            }
+            
+            $logs[] = [
+                'timestamp' => $timestamp,
+                'level' => $level,
+                'message' => $message,
+                'context' => $context,
+                'fullLine' => $line
+            ];
+        } else {
+            // If line doesn't match expected format, include it as-is
+            $logs[] = [
+                'timestamp' => '',
+                'level' => 'UNKNOWN',
+                'message' => $line,
+                'context' => null,
+                'fullLine' => $line
+            ];
+        }
+    }
+    
+    return $logs;
+}
+
+$app->get('/logs', function (Request $request, Response $response) use ($twig) {
+    $params = $request->getQueryParams();
+    
+    // Handle download request
+    if (isset($params['download'])) {
+        $logs = getLogEntries(1000);
+        $content = implode("\n", array_map(fn($log) => $log['fullLine'], $logs));
+        $response = $response->withHeader('Content-Type', 'text/plain')
+                           ->withHeader('Content-Disposition', 'attachment; filename="bot-logs-' . date('Y-m-d-H-i-s') . '.log"');
+        $response->getBody()->write($content);
+        return $response;
+    }
+    
+    // Get log entries
+    $logs = getLogEntries(200);
+    
+    // Calculate log statistics
+    $logStats = [
+        'total' => count($logs),
+        'errors' => count(array_filter($logs, fn($log) => $log['level'] === 'ERROR')),
+        'warnings' => count(array_filter($logs, fn($log) => $log['level'] === 'WARNING')),
+        'info' => count(array_filter($logs, fn($log) => $log['level'] === 'INFO'))
+    ];
+    
+    return $twig->render($response, 'logs.twig', [
+        'logs' => $logs, 
+        'logStats' => $logStats,
+        'currentPage' => 'logs'
+    ]);
+})->setName('logs')->add($authMiddleware);
+
 $app->run(); 

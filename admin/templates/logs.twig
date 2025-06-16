@@ -1,0 +1,183 @@
+{% extends "layout.twig" %}
+
+{% block heading %}System Logs{% endblock %}
+
+{% block content %}
+<div class="level">
+    <div class="level-left">
+        <div class="level-item">
+            <h1 class="title is-4">System Logs</h1>
+        </div>
+    </div>
+    <div class="level-right">
+        <div class="level-item">
+            <div class="field is-grouped">
+                <p class="control">
+                    <a href="{{ url_for('logs') }}?refresh=1" class="button is-primary is-outlined">
+                        <span class="icon">
+                            <i class="fas fa-sync-alt"></i>
+                        </span>
+                        <span>Refresh</span>
+                    </a>
+                </p>
+                <p class="control">
+                    <a href="{{ url_for('logs') }}?download=1" class="button is-outlined">
+                        <span class="icon">
+                            <i class="fas fa-download"></i>
+                        </span>
+                        <span>Download</span>
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if logStats %}
+<div class="columns">
+    <div class="column is-3">
+        <div class="notification is-info">
+            <p class="title is-5">{{ logStats.total }}</p>
+            <p class="subtitle is-6">Total Entries</p>
+        </div>
+    </div>
+    <div class="column is-3">
+        <div class="notification is-danger">
+            <p class="title is-5">{{ logStats.errors }}</p>
+            <p class="subtitle is-6">Errors</p>
+        </div>
+    </div>
+    <div class="column is-3">
+        <div class="notification is-warning">
+            <p class="title is-5">{{ logStats.warnings }}</p>
+            <p class="subtitle is-6">Warnings</p>
+        </div>
+    </div>
+    <div class="column is-3">
+        <div class="notification is-success">
+            <p class="title is-5">{{ logStats.info }}</p>
+            <p class="subtitle is-6">Info</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="box">
+    <div class="level">
+        <div class="level-left">
+            <div class="level-item">
+                <h5 class="title is-5">Log Entries</h5>
+            </div>
+        </div>
+        <div class="level-right">
+            <div class="level-item">
+                <small class="has-text-grey">Showing last {{ logs|length }} entries</small>
+            </div>
+        </div>
+    </div>
+    
+    {% if logs %}
+    <div class="table-container">
+        <table class="table is-fullwidth is-striped is-hoverable">
+            <thead>
+                <tr>
+                    <th style="width: 150px;">Timestamp</th>
+                    <th style="width: 80px;">Level</th>
+                    <th>Message</th>
+                    <th style="width: 100px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr class="log-entry">
+                    <td><code class="is-size-7">{{ log.timestamp }}</code></td>
+                    <td>
+                        <span class="tag 
+                            {% if log.level == 'ERROR' %}is-danger
+                            {% elseif log.level == 'WARNING' %}is-warning
+                            {% elseif log.level == 'INFO' %}is-info
+                            {% else %}is-light
+                            {% endif %}">
+                            {{ log.level }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="log-message">
+                            {{ log.message|e }}
+                        </div>
+                        {% if log.context %}
+                        <button class="button is-small is-outlined mt-2" type="button" 
+                                onclick="toggleContext('context-{{ loop.index }}')">
+                            Show Context
+                        </button>
+                        <div class="mt-2 is-hidden" id="context-{{ loop.index }}">
+                            <pre class="has-background-light p-3"><code>{{ log.context|raw }}</code></pre>
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="button is-small is-outlined copy-log" 
+                                data-log="{{ log.fullLine|e('html_attr') }}" 
+                                title="Copy to clipboard">
+                            <span class="icon is-small">
+                                <i class="fas fa-copy"></i>
+                            </span>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="has-text-centered py-6">
+        <span class="icon is-large has-text-grey-light">
+            <i class="fas fa-file-alt fa-3x"></i>
+        </span>
+        <p class="has-text-grey mt-3">No log entries found.</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.log-message {
+    font-family: 'Courier New', monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+pre code {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Toggle context visibility
+    window.toggleContext = function(id) {
+        const element = document.getElementById(id);
+        element.classList.toggle('is-hidden');
+    };
+    
+    // Copy to clipboard functionality
+    document.querySelectorAll('.copy-log').forEach(button => {
+        button.addEventListener('click', function() {
+            const logText = this.getAttribute('data-log');
+            navigator.clipboard.writeText(logText).then(() => {
+                const icon = this.querySelector('i');
+                icon.className = 'fas fa-check';
+                setTimeout(() => {
+                    icon.className = 'fas fa-copy';
+                }, 2000);
+            });
+        });
+    });
+
+    // Auto-refresh every 30 seconds
+    setTimeout(() => {
+        window.location.reload();
+    }, 30000);
+});
+</script>
+{% endblock %} 
