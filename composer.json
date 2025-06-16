@@ -1,54 +1,24 @@
 {
-    "name": "educ/nextcloud-ai-chatbot",
-    "description": "Nextcloud AI Chatbot with RAG support and admin panel",
+    "name": "educ/nextcloud-bot",
+    "description": "Nextcloud AI Chatbot integrating SAIA API and Nextcloud Talk",
     "type": "project",
-    "license": "MIT",
     "require": {
-        "php": ">=8.1",
+        "php": "^8.1",
         "slim/slim": "^4.12",
         "slim/psr7": "^1.6",
-        "twig/twig": "^3.7",
-        "openai-php/client": "^0.8",
+        "twig/twig": "^3.8",
+        "openai-php/client": "^0.5",
+        "pgvector/pgvector": "^0.2",
         "vlucas/phpdotenv": "^5.5",
-        "symfony/polyfill-mbstring": "^1.28",
-        "symfony/polyfill-ctype": "^1.28",
-        "ext-pdo": "*",
-        "ext-pgsql": "*",
-        "ext-curl": "*",
-        "ext-json": "*",
-        "ext-mbstring": "*"
+        "symfony/polyfill-ctype": "^1.29",
+        "symfony/polyfill-mbstring": "^1.29"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.3",
-        "phpstan/phpstan": "^1.10"
+        "phpunit/phpunit": "^10.5"
     },
     "autoload": {
         "psr-4": {
-            "EducBot\\": "apps/nextcloud-bot/src/"
-        },
-        "files": [
-            "apps/nextcloud-bot/src/bootstrap.php"
-        ]
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "EducBot\\Tests\\": "apps/nextcloud-bot/tests/"
+            "NextcloudBot\\": "apps/nextcloud-bot/src/"
         }
-    },
-    "scripts": {
-        "test": "phpunit",
-        "analyse": "phpstan analyse --level=8 apps/nextcloud-bot/src",
-        "post-install-cmd": [
-            "php -r \"if (!file_exists('.env')) { copy('.env.example', '.env'); }\""
-        ]
-    },
-    "config": {
-        "optimize-autoloader": true,
-        "sort-packages": true,
-        "allow-plugins": {
-            "*": true
-        }
-    },
-    "minimum-stability": "stable",
-    "prefer-stable": true
+    }
 } 

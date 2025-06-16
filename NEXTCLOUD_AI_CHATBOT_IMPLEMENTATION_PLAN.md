@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS bot_room_config (
 | Stage | Question (default) | Notes |
 |-------|--------------------|-------|
 | 0 | "Is this a group chat (yes/no)?" | Sets `is_group`. |
-| 1 (group only) | "Should I respond to every message or only when mentioned (@educai)?" | Saves `mention_mode`. |
+| 1  | "Should I respond to every message or only when mentioned (@educai)?" | Saves `mention_mode`. |
 | 2…n | Custom questions from admin panel (different list for DM vs group) | Responses stored in `bot_room_config.meta.answers`. |
 | end | Mark `onboarding_done = TRUE` | Answers merged into future system prompt. |
 
