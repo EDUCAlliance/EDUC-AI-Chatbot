@@ -39,7 +39,7 @@ $db = NextcloudBot\getDbConnection();
 $logger = new \NextcloudBot\Helpers\Logger();
 $apiClient = new ApiClient(getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT') ?: 'https://chat-ai.academiccloud.de/v1', $logger);
 $vectorStore = new VectorStore($db);
-$embeddingService = new EmbeddingService($apiClient, $vectorStore, $logger);
+$embeddingService = new EmbeddingService($apiClient, $vectorStore, $logger, $db);
 
 try {
     $db->query("SELECT 1 FROM bot_admin LIMIT 1");
@@ -56,6 +56,14 @@ $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS embedding_model TEX
 $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_top_k INTEGER DEFAULT 3");
 $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_chunk_size INTEGER DEFAULT 250");
 $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_chunk_overlap INTEGER DEFAULT 25");
+
+// Initialize default bot mention if not exists
+$mentionExists = $db->prepare("SELECT COUNT(*) FROM bot_settings WHERE setting_key = 'mention'");
+$mentionExists->execute();
+if ($mentionExists->fetchColumn() == 0) {
+    $stmt = $db->prepare("INSERT INTO bot_settings (setting_key, setting_value, description) VALUES (?, ?, ?)");
+    $stmt->execute(['mention', '@educai', 'Bot mention name that users must use to trigger responses']);
+}
 
 // --- Middleware & Initial State Check ---
 $adminExists = (bool) $db->query("SELECT id FROM bot_admin LIMIT 1")->fetchColumn();
@@ -175,16 +183,39 @@ $app->map(['GET', 'POST'], '/prompt', function (Request $request, Response $resp
 
 $app->map(['GET', 'POST'], '/onboarding', function (Request $request, Response $response) use ($twig, $db, $app) {
     if ($request->getMethod() === 'POST') {
+        $botMention = trim($request->getParsedBody()['bot_mention'] ?? '@educai');
         $groupQuestions = $request->getParsedBody()['group_questions'] ?? '';
         $dmQuestions = $request->getParsedBody()['dm_questions'] ?? '';
+        
+        // Ensure mention starts with @
+        if (!str_starts_with($botMention, '@')) {
+            $botMention = '@' . $botMention;
+        }
+        
         $groupJson = json_encode(array_filter(array_map('trim', explode("\n", $groupQuestions))));
         $dmJson = json_encode(array_filter(array_map('trim', explode("\n", $dmQuestions))));
+        
+        // Update or insert bot mention setting
+        $stmt = $db->prepare("INSERT INTO bot_settings (setting_key, setting_value) VALUES (?, ?) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value");
+        $stmt->execute(['mention', $botMention]);
+        
         $stmt = $db->prepare("UPDATE bot_settings SET onboarding_group_questions = ?, onboarding_dm_questions = ? WHERE id = 1");
         $stmt->execute([$groupJson, $dmJson]);
         return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('onboarding'))->withStatus(302);
     }
+    
+    // Get current settings
     $settings = $db->query("SELECT onboarding_group_questions, onboarding_dm_questions FROM bot_settings WHERE id = 1")->fetch();
-    return $twig->render($response, 'onboarding.twig', ['group_questions' => implode("\n", json_decode($settings['onboarding_group_questions'] ?? '[]', true)), 'dm_questions' => implode("\n", json_decode($settings['onboarding_dm_questions'] ?? '[]', true)), 'currentPage' => 'onboarding']);
+    $mentionStmt = $db->prepare("SELECT setting_value FROM bot_settings WHERE setting_key = 'mention'");
+    $mentionStmt->execute();
+    $mentionSetting = $mentionStmt->fetch();
+    
+    return $twig->render($response, 'onboarding.twig', [
+        'bot_mention' => $mentionSetting['setting_value'] ?? '@educai',
+        'group_questions' => implode("\n", json_decode($settings['onboarding_group_questions'] ?? '[]', true)), 
+        'dm_questions' => implode("\n", json_decode($settings['onboarding_dm_questions'] ?? '[]', true)), 
+        'currentPage' => 'onboarding'
+    ]);
 })->setName('onboarding')->add($authMiddleware);
 
 $app->map(['GET', 'POST'], '/rag-settings', function (Request $request, Response $response) use ($twig, $db, $app, $apiClient) {

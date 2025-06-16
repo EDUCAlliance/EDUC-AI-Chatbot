@@ -11,15 +11,17 @@ class EmbeddingService
     private ApiClient $apiClient;
     private VectorStore $vectorStore;
     private Logger $logger;
+    private \PDO $db;
 
     // A simple approximation for token count based on words.
     private const CHUNK_SIZE_IN_TOKENS = 250; 
 
-    public function __construct(ApiClient $apiClient, VectorStore $vectorStore, Logger $logger)
+    public function __construct(ApiClient $apiClient, VectorStore $vectorStore, Logger $logger, \PDO $db)
     {
         $this->apiClient = $apiClient;
         $this->vectorStore = $vectorStore;
         $this->logger = $logger;
+        $this->db = $db;
     }
 
     /**

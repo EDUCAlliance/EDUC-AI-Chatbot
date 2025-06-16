@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 // The deployment system generates this file to load all environment variables.
-if (file_exists(__DIR__ . '/auto-include.php')) {
+if (file_exists(__DIR__ . '/educ-bootstrap.php')) {
+    require_once __DIR__ . '/educ-bootstrap.php';
+} elseif (file_exists(__DIR__ . '/auto-include.php')) {
     require_once __DIR__ . '/auto-include.php';
 }
 
@@ -24,7 +26,7 @@ $apiClient = new ApiClient(
     $logger
 );
 $vectorStore = new VectorStore($db);
-$embeddingService = new EmbeddingService($apiClient, $vectorStore, $logger);
+$embeddingService = new EmbeddingService($apiClient, $vectorStore, $logger, $db);
 $onboardingManager = new OnboardingManager($db);
 
 $secret = NextcloudBot\env('BOT_TOKEN');
@@ -46,15 +48,54 @@ $data = json_decode($inputContent, true);
 $logger->info('Webhook received', ['data' => $data]);
 
 // --- 2. Extract Data & Basic Validation ---
-$message = $data['object']['content']['message'] ?? '';
+// The content is a JSON string that needs to be decoded
+$contentJson = $data['object']['content'] ?? '';
+$contentData = json_decode($contentJson, true);
+$message = $contentData['message'] ?? '';
 $roomToken = $data['target']['id'] ?? null;
 $userId = $data['actor']['id'] ?? null;
+$userName = $data['actor']['name'] ?? null;
 $messageId = (int)($data['object']['id'] ?? 0);
 
+$logger->info('Extracted webhook data', [
+    'message' => $message,
+    'roomToken' => $roomToken,
+    'userId' => $userId,
+    'userName' => $userName,
+    'messageId' => $messageId,
+    'rawContent' => $contentJson
+]);
+
 if (empty($message) || empty($roomToken) || empty($userId)) {
-    $logger->error('Webhook payload missing required fields.', ['data' => $data]);
+    $logger->error('Webhook payload missing required fields.', [
+        'message' => $message,
+        'roomToken' => $roomToken,
+        'userId' => $userId,
+        'rawData' => $data
+    ]);
     http_response_code(400);
     exit('Missing required fields.');
+}
+
+// --- Check for Bot Mention (early exit if not mentioned) ---
+$settingsStmt = $db->query("SELECT setting_key, setting_value FROM bot_settings WHERE setting_key = 'mention'");
+$mentionSetting = $settingsStmt->fetch();
+$botMention = $mentionSetting['setting_value'] ?? '@educai';
+
+// Remove @ if present in the stored mention
+$mentionName = ltrim($botMention, '@');
+
+$logger->info('Checking for bot mention', [
+    'botMention' => $botMention,
+    'mentionName' => $mentionName,
+    'message' => $message
+]);
+
+// Check if message contains the bot mention
+if (stripos($message, '@' . $mentionName) === false) {
+    $logger->info('Bot not mentioned, ignoring message', ['message' => $message]);
+    http_response_code(200);
+    exit('Bot not mentioned.');
 }
 
 // --- 3. Room Configuration & Onboarding ---
@@ -74,10 +115,18 @@ function sendReply(string $message, string $roomToken, int $replyToId, string $n
     $random = bin2hex(random_bytes(32));
     $hash = hash_hmac('sha256', $random . $requestBody['message'], $secret);
     
+    $logger->info('Sending reply to Nextcloud', [
+        'apiUrl' => $apiUrl,
+        'roomToken' => $roomToken,
+        'replyToId' => $replyToId,
+        'messagePreview' => substr($message, 0, 100) . '...'
+    ]);
+    
     $ch = curl_init($apiUrl);
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
     curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonBody);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/json',
         'OCS-APIRequest: true',
@@ -87,59 +136,115 @@ function sendReply(string $message, string $roomToken, int $replyToId, string $n
     
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
     curl_close($ch);
     
+    if ($curlError) {
+        $logger->error('cURL error when sending reply', ['error' => $curlError]);
+        return false;
+    }
+    
     if ($httpCode >= 400) {
-        $logger->error('Failed to send reply to Nextcloud', ['code' => $httpCode, 'response' => $response]);
+        $logger->error('Failed to send reply to Nextcloud', [
+            'code' => $httpCode, 
+            'response' => $response,
+            'requestBody' => $requestBody
+        ]);
+        return false;
     } else {
-        $logger->info('Successfully sent reply to Nextcloud.', ['message' => $message]);
+        $logger->info('Successfully sent reply to Nextcloud.', [
+            'httpCode' => $httpCode,
+            'messageLength' => strlen($message)
+        ]);
+        return true;
     }
 }
 
 // If no config, start onboarding
 if (!$roomConfig) {
+    $logger->info('No room config found, starting onboarding', ['roomToken' => $roomToken]);
     // Create initial record
     $meta = ['stage' => 0, 'answers' => []];
-    $stmt = $db->prepare("INSERT INTO bot_room_config (room_token, is_group, mention_mode, meta) VALUES (?, ?, ?, ?)");
-    $stmt->execute([$roomToken, true, 'on_mention', json_encode($meta)]);
-    $roomConfig = ['room_token' => $roomToken, 'is_group' => true, 'mention_mode' => 'on_mention', 'onboarding_done' => false, 'meta' => $meta];
+    $stmt = $db->prepare("INSERT INTO bot_room_config (room_token, room_type, onboarding_state, meta) VALUES (?, ?, ?, ?)");
+    $stmt->execute([$roomToken, 'group', 'not_started', json_encode($meta)]);
+    $roomConfig = [
+        'room_token' => $roomToken, 
+        'room_type' => 'group', 
+        'onboarding_state' => 'not_started', 
+        'onboarding_done' => false, 
+        'meta' => $meta
+    ];
 } else {
     $roomConfig['meta'] = json_decode($roomConfig['meta'], true);
+    // Convert old column names to new ones for compatibility
+    if (!isset($roomConfig['onboarding_done'])) {
+        $roomConfig['onboarding_done'] = ($roomConfig['onboarding_state'] ?? 'not_started') === 'completed';
+    }
 }
 
+$logger->info('Room config loaded', [
+    'roomConfig' => $roomConfig,
+    'onboardingDone' => $roomConfig['onboarding_done']
+]);
 
 if ($roomConfig['onboarding_done'] == false) {
+    $logger->info('Processing onboarding for room', ['roomToken' => $roomToken, 'message' => $message]);
+    
     // Process the answer
     $onboardingManager->processAnswer($roomConfig, $message);
     
     // Get next question
-    $settingsStmt = $db->query("SELECT * FROM bot_settings WHERE id = 1");
-    $globalSettings = $settingsStmt->fetch() ?: [];
+    $settingsStmt = $db->query("SELECT setting_key, setting_value FROM bot_settings");
+    $settingsRows = $settingsStmt->fetchAll();
+    $globalSettings = [];
+    foreach ($settingsRows as $row) {
+        $globalSettings[$row['setting_key']] = $row['setting_value'];
+    }
     $nextStep = $onboardingManager->getNextQuestion($roomConfig, $globalSettings);
     
-    sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
+    $logger->info('Sending onboarding question', ['question' => $nextStep['question']]);
+    
+    $success = sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
+    if (!$success) {
+        $logger->error('Failed to send onboarding reply');
+    }
     exit;
 }
 
 // --- 4. Process Regular Message ---
+$logger->info('Processing regular message', ['roomToken' => $roomToken, 'userId' => $userId, 'message' => $message]);
 
 // Store user message
 $stmt = $db->prepare("INSERT INTO bot_conversations (room_token, user_id, role, content) VALUES (?, ?, 'user', ?)");
 $stmt->execute([$roomToken, $userId, $message]);
 
 // --- 5. RAG Context ---
-$settingsStmt = $db->query("SELECT embedding_model, rag_top_k FROM bot_settings WHERE id = 1");
-$ragSettings = $settingsStmt->fetch();
+$settingsStmt = $db->query("SELECT setting_key, setting_value FROM bot_settings WHERE setting_key IN ('embedding_model', 'rag_top_k')");
+$settingsRows = $settingsStmt->fetchAll();
+$ragSettings = [];
+foreach ($settingsRows as $row) {
+    $ragSettings[$row['setting_key']] = $row['setting_value'];
+}
 $embeddingModel = $ragSettings['embedding_model'] ?? 'e5-mistral-7b-instruct';
 $topK = (int)($ragSettings['rag_top_k'] ?? 3);
 
-$embeddingResponse = $apiClient->getEmbedding($message, $embeddingModel);
 $ragContext = '';
-if (!isset($embeddingResponse['error']) && !empty($embeddingResponse['data'][0]['embedding'])) {
-    $similarChunks = $vectorStore->findSimilar($embeddingResponse['data'][0]['embedding'], $topK);
-    if (!empty($similarChunks)) {
-        $ragContext = "Here is some context that might be relevant:\n\n---\n" . implode("\n\n", $similarChunks) . "\n---\n\n";
+try {
+    $embeddingResponse = $apiClient->getEmbedding($message, $embeddingModel);
+    $logger->info('Embedding response received', ['hasError' => isset($embeddingResponse['error'])]);
+    
+    if (!isset($embeddingResponse['error']) && !empty($embeddingResponse['data'][0]['embedding'])) {
+        $similarChunks = $vectorStore->findSimilar($embeddingResponse['data'][0]['embedding'], $topK);
+        $logger->info('Similar chunks found', ['count' => count($similarChunks)]);
+        
+        if (!empty($similarChunks)) {
+            $ragContext = "Here is some context that might be relevant:\n\n---\n" . implode("\n\n", $similarChunks) . "\n---\n\n";
+        }
+    } else {
+        $logger->warning('No embedding data received', ['response' => $embeddingResponse]);
     }
+} catch (Exception $e) {
+    $logger->error('Error generating embeddings', ['error' => $e->getMessage()]);
 }
 
 // --- 6. LLM Call ---
@@ -148,9 +253,16 @@ $historyStmt = $db->prepare("SELECT role, content FROM bot_conversations WHERE r
 $historyStmt->execute([$roomToken]);
 $history = array_reverse($historyStmt->fetchAll());
 
-// Fetch system prompt
-$settingsStmt = $db->query("SELECT system_prompt, default_model FROM bot_settings WHERE id = 1");
-$globalSettings = $settingsStmt->fetch() ?: ['system_prompt' => 'You are a helpful assistant.', 'default_model' => 'meta-llama-3.1-8b-instruct'];
+// Fetch system prompt and model
+$settingsStmt = $db->query("SELECT setting_key, setting_value FROM bot_settings WHERE setting_key IN ('system_prompt', 'default_model')");
+$settingsRows = $settingsStmt->fetchAll();
+$globalSettings = [
+    'system_prompt' => 'You are a helpful assistant.',
+    'default_model' => 'meta-llama-3.1-8b-instruct'
+];
+foreach ($settingsRows as $row) {
+    $globalSettings[$row['setting_key']] = $row['setting_value'];
+}
 $systemPrompt = $globalSettings['system_prompt'];
 $model = $globalSettings['default_model'];
 
@@ -160,8 +272,17 @@ foreach ($history as $msg) {
     $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
 }
 
-$llmResponse = $apiClient->getChatCompletions($model, $messages);
-$replyContent = $llmResponse['choices'][0]['message']['content'] ?? 'Sorry, I encountered an error and cannot reply right now.';
+$logger->info('Sending request to LLM', ['model' => $model, 'messageCount' => count($messages)]);
+
+try {
+    $llmResponse = $apiClient->getChatCompletions($model, $messages);
+    $logger->info('LLM response received', ['hasChoices' => isset($llmResponse['choices'])]);
+    
+    $replyContent = $llmResponse['choices'][0]['message']['content'] ?? 'Sorry, I encountered an error and cannot reply right now.';
+} catch (Exception $e) {
+    $logger->error('Error calling LLM API', ['error' => $e->getMessage()]);
+    $replyContent = 'Sorry, I encountered an error and cannot reply right now.';
+}
 
 // --- 7. Reply ---
 // Store assistant message
@@ -169,4 +290,11 @@ $stmt = $db->prepare("INSERT INTO bot_conversations (room_token, user_id, role, 
 $stmt->execute([$roomToken, 'assistant', $replyContent]);
 
 // Send reply to Nextcloud
-sendReply($replyContent, $roomToken, $messageId, $ncUrl, $secret, $logger); 
+$logger->info('Sending final reply', ['replyLength' => strlen($replyContent)]);
+$success = sendReply($replyContent, $roomToken, $messageId, $ncUrl, $secret, $logger);
+
+if (!$success) {
+    $logger->error('Failed to send final reply to Nextcloud');
+} else {
+    $logger->info('Successfully completed message processing');
+} 

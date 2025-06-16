@@ -39,12 +39,12 @@ function getDbConnection(): PDO
 
     if ($db === null) {
         try {
-            // Use getenv() for better compatibility across different server environments
-            $host = getenv('CLOUDRON_POSTGRESQL_HOST') ?: 'postgresql';
-            $port = getenv('CLOUDRON_POSTGRESQL_PORT') ?: 5432;
-            $database = getenv('CLOUDRON_POSTGRESQL_DATABASE') ?: 'nextcloud_bot';
-            $username = getenv('CLOUDRON_POSTGRESQL_USERNAME') ?: 'user';
-            $password = getenv('CLOUDRON_POSTGRESQL_PASSWORD') ?: 'password';
+            // Use standard database environment variables
+            $host = getenv('DB_HOST') ?: getenv('CLOUDRON_POSTGRESQL_HOST') ?: 'localhost';
+            $port = getenv('DB_PORT') ?: getenv('CLOUDRON_POSTGRESQL_PORT') ?: 5432;
+            $database = getenv('DB_NAME') ?: getenv('CLOUDRON_POSTGRESQL_DATABASE') ?: 'educ_ai_talkbot';
+            $username = getenv('DB_USER') ?: getenv('CLOUDRON_POSTGRESQL_USERNAME') ?: 'postgres';
+            $password = getenv('DB_PASS') ?: getenv('CLOUDRON_POSTGRESQL_PASSWORD') ?: 'password';
             
             $dsn = "pgsql:host={$host};port={$port};dbname={$database}";
             
