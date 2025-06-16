@@ -138,13 +138,16 @@ function sendReply(string $message, string $roomToken, int $replyToId, string $n
     ];
     $jsonBody = json_encode($requestBody);
     $random = bin2hex(random_bytes(32));
-    $hash = hash_hmac('sha256', $random . $requestBody['message'], $secret);
+    $hash = hash_hmac('sha256', $random . $jsonBody, $secret);
     
     $logger->info('Sending reply to Nextcloud', [
         'apiUrl' => $apiUrl,
         'roomToken' => $roomToken,
         'replyToId' => $replyToId,
-        'messagePreview' => substr($message, 0, 100) . '...'
+        'messagePreview' => substr($message, 0, 100) . (strlen($message) > 100 ? '...' : ''),
+        'fullMessage' => $message,
+        'messageLength' => strlen($message),
+        'requestBody' => $requestBody
     ]);
     
     $ch = curl_init($apiUrl);
@@ -173,13 +176,15 @@ function sendReply(string $message, string $roomToken, int $replyToId, string $n
         $logger->error('Failed to send reply to Nextcloud', [
             'code' => $httpCode, 
             'response' => $response,
-            'requestBody' => $requestBody
+            'requestBody' => $requestBody,
+            'jsonBody' => $jsonBody
         ]);
         return false;
     } else {
         $logger->info('Successfully sent reply to Nextcloud.', [
             'httpCode' => $httpCode,
-            'messageLength' => strlen($message)
+            'messageLength' => strlen($message),
+            'response' => $response
         ]);
         return true;
     }
@@ -326,9 +331,18 @@ $logger->info('Sending request to LLM', ['model' => $model, 'messageCount' => co
 
 try {
     $llmResponse = $apiClient->getChatCompletions($model, $messages);
-    $logger->info('LLM response received', ['hasChoices' => isset($llmResponse['choices'])]);
+    $logger->info('LLM response received', [
+        'hasChoices' => isset($llmResponse['choices']),
+        'fullResponse' => $llmResponse
+    ]);
     
     $replyContent = $llmResponse['choices'][0]['message']['content'] ?? 'Sorry, I encountered an error and cannot reply right now.';
+    
+    $logger->info('Reply content extracted', [
+        'replyContent' => $replyContent,
+        'replyLength' => strlen($replyContent),
+        'firstChars' => substr($replyContent, 0, 50)
+    ]);
 } catch (Exception $e) {
     $logger->error('Error calling LLM API', ['error' => $e->getMessage()]);
     $replyContent = 'Sorry, I encountered an error and cannot reply right now.';

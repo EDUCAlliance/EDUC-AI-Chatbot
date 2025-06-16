@@ -1106,10 +1106,12 @@ POST /connect.php HTTP/1.1" 400 507
 ```
 SQLSTATE[42703]: Undefined column: column "setting_key" does not exist
 SQLSTATE[42703]: Undefined column: column "room_type" does not exist
+SQLSTATE[22P02]: Invalid text representation: invalid input syntax for type boolean
 ```
 
 **Solutions:**
 - The database schema was updated to use the correct table structure
+- PostgreSQL requires proper boolean type handling for `is_group` and `onboarding_done` columns
 - Access the admin panel once to trigger automatic schema migration
 - Or manually run: `psql your_database < fix_database_schema.sql`
 - Verify schema: 

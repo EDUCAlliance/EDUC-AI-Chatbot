@@ -134,6 +134,25 @@ $mentioned = stripos($message, '@' . $mentionName) !== false;
 echo "    Configured bot mention: $botMention\n";
 echo "    Bot mention detected in test message: " . ($mentioned ? 'YES' : 'NO') . "\n";
 
+// Test room config creation (boolean handling)
+echo "\n6. Room Config Test:\n";
+try {
+    $testRoomToken = 'debug_test_' . time();
+    $stmt = $db->prepare("INSERT INTO bot_room_config (room_token, is_group, mention_mode, onboarding_done, meta) VALUES (?, ?, ?, ?, ?)");
+    $stmt->bindValue(1, $testRoomToken, \PDO::PARAM_STR);
+    $stmt->bindValue(2, true, \PDO::PARAM_BOOL);
+    $stmt->bindValue(3, 'on_mention', \PDO::PARAM_STR);
+    $stmt->bindValue(4, false, \PDO::PARAM_BOOL);
+    $stmt->bindValue(5, '{"test": true}', \PDO::PARAM_STR);
+    $stmt->execute();
+    
+    // Clean up test data
+    $db->prepare("DELETE FROM bot_room_config WHERE room_token = ?")->execute([$testRoomToken]);
+    echo "  ✓ Boolean parameter binding works correctly\n";
+} catch (Exception $e) {
+    echo "  ✗ Boolean parameter binding failed: " . $e->getMessage() . "\n";
+}
+
 echo "\n=== Debug Complete ===\n";
 echo "If you see errors above, fix them before testing the webhook.\n";
 echo "To test the webhook manually, send a POST request to /connect.php with proper headers.\n"; 
