@@ -1,11 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 // The deployment system generates this file to load all environment variables.
 if (file_exists(__DIR__ . '/../auto-include.php')) {
     require_once __DIR__ . '/../auto-include.php';
 }
-
-declare(strict_types=1);
 
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
