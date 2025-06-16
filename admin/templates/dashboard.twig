@@ -5,32 +5,32 @@
 {% block heading %}Dashboard{% endblock %}
 
 {% block content %}
-    <nav class="level is-mobile">
-        <div class="level-item has-text-centered">
-            <div>
+    <div class="columns is-multiline">
+        <div class="column is-one-quarter">
+            <div class="dashboard-card">
                 <p class="heading">Documents</p>
                 <p class="title">{{ stats.docs }}</p>
             </div>
         </div>
-        <div class="level-item has-text-centered">
-            <div>
+        <div class="column is-one-quarter">
+            <div class="dashboard-card">
                 <p class="heading">Embeddings</p>
                 <p class="title">{{ stats.embeddings }}</p>
             </div>
         </div>
-        <div class="level-item has-text-centered">
-            <div>
+        <div class="column is-one-quarter">
+            <div class="dashboard-card">
                 <p class="heading">Conversations</p>
                 <p class="title">{{ stats.conversations }}</p>
             </div>
         </div>
-        <div class="level-item has-text-centered">
-            <div>
+        <div class="column is-one-quarter">
+            <div class="dashboard-card">
                 <p class="heading">Configured Rooms</p>
                 <p class="title">{{ stats.rooms }}</p>
             </div>
         </div>
-    </nav>
+    </div>
 
     <div class="box mt-5">
         <h2 class="subtitle">Welcome to the Admin Panel</h2>

@@ -31,7 +31,12 @@ class EmbeddingService
      */
     public function generateAndStoreEmbeddings(int $docId, string $content): bool
     {
-        $chunks = $this->chunkText($content);
+        $settingsStmt = $this->db->query("SELECT rag_chunk_size, rag_chunk_overlap FROM bot_settings WHERE id = 1");
+        $ragSettings = $settingsStmt->fetch();
+        $chunkSize = $ragSettings['rag_chunk_size'] ?? 250;
+        $chunkOverlap = $ragSettings['rag_chunk_overlap'] ?? 25;
+
+        $chunks = $this->chunkText($content, $chunkSize, $chunkOverlap);
         $success = true;
 
         foreach ($chunks as $index => $chunk) {
@@ -68,7 +73,7 @@ class EmbeddingService
      * @param string $text The text to split.
      * @return array An array of text chunks.
      */
-    private function chunkText(string $text): array
+    private function chunkText(string $text, int $chunkSize, int $chunkOverlap): array
     {
         // Normalize whitespace and split into words
         $text = preg_replace('/\s+/', ' ', trim($text));
@@ -76,18 +81,16 @@ class EmbeddingService
         
         $chunks = [];
         $currentChunk = [];
+        $wordIndex = 0;
 
-        foreach ($words as $word) {
-            $currentChunk[] = $word;
-            if (count($currentChunk) >= self::CHUNK_SIZE_IN_TOKENS) {
-                $chunks[] = implode(' ', $currentChunk);
-                $currentChunk = [];
-            }
-        }
+        while ($wordIndex < count($words)) {
+            // Get a slice of words for the chunk
+            $chunkSlice = array_slice($words, $wordIndex, $chunkSize);
+            $chunks[] = implode(' ', $chunkSlice);
 
-        // Add the last remaining chunk
-        if (!empty($currentChunk)) {
-            $chunks[] = implode(' ', $currentChunk);
+            // Move the index forward, considering the overlap
+            $advance = $chunkSize - $chunkOverlap;
+            $wordIndex += ($advance > 0) ? $advance : $chunkSize;
         }
 
         return $chunks;

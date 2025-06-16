@@ -15,6 +15,7 @@ use Slim\Views\TwigMiddleware;
 use NextcloudBot\Helpers\Session;
 use NextcloudBot\Services\ApiClient;
 use NextcloudBot\Services\EmbeddingService;
+use NextcloudBot\Services\VectorStore;
 
 require __DIR__ . '/../src/bootstrap.php';
 
@@ -33,32 +34,33 @@ $twig->getEnvironment()->addGlobal('session', $_SESSION['nextcloud_bot_session']
 // The `url_for` function in Twig needs the RouteParser, which TwigMiddleware adds to the container
 $app->add(TwigMiddleware::create($app, $twig));
 
-// --- Database & Schema ---
+// --- Database, Services & Schema ---
 $db = NextcloudBot\getDbConnection();
-$apiClient = new ApiClient(getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT') ?: 'https://chat-ai.academiccloud.de/v1', new \NextcloudBot\Helpers\Logger());
-$embeddingService = new EmbeddingService($apiClient, new \NextcloudBot\Services\VectorStore($db), new \NextcloudBot\Helpers\Logger());
+$logger = new \NextcloudBot\Helpers\Logger();
+$apiClient = new ApiClient(getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT') ?: 'https://chat-ai.academiccloud.de/v1', $logger);
+$vectorStore = new VectorStore($db);
+$embeddingService = new EmbeddingService($apiClient, $vectorStore, $logger);
 
 try {
     $db->query("SELECT 1 FROM bot_admin LIMIT 1");
 } catch (\PDOException $e) {
     if ($e->getCode() === '42P01') {
-        try {
-            $sql = file_get_contents(__DIR__ . '/../database.sql');
-            $db->exec($sql);
-        } catch (\Exception $initError) {
-            http_response_code(500);
-            die("Database schema initialization failed: " . $initError->getMessage());
-        }
+        $db->exec(file_get_contents(__DIR__ . '/../database.sql'));
     } else {
         throw $e;
     }
 }
 
+// Add new RAG setting columns if they don't exist
+$db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS embedding_model TEXT DEFAULT 'e5-mistral-7b-instruct'");
+$db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_top_k INTEGER DEFAULT 3");
+$db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_chunk_size INTEGER DEFAULT 250");
+$db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_chunk_overlap INTEGER DEFAULT 25");
+
 // --- Middleware & Initial State Check ---
 $adminExists = (bool) $db->query("SELECT id FROM bot_admin LIMIT 1")->fetchColumn();
 
 $authMiddleware = function (Request $request, $handler) use ($app) {
-    Session::start();
     if (!Session::has('admin_logged_in')) {
         $response = new \Slim\Psr7\Response();
         return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('login'))->withStatus(302);
@@ -93,7 +95,6 @@ $app->map(['GET', 'POST'], '/login', function (Request $request, Response $respo
         $password = $request->getParsedBody()['password'] ?? '';
         $hash = $db->query("SELECT password_hash FROM bot_admin LIMIT 1")->fetchColumn();
         if (password_verify($password, $hash)) {
-            Session::start();
             Session::regenerate();
             Session::set('admin_logged_in', true);
             return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('dashboard'))->withStatus(302);
@@ -119,31 +120,28 @@ $app->get('/', function (Request $request, Response $response) use ($twig, $db) 
 
 $app->get('/documents', function (Request $request, Response $response) use ($twig, $db) {
     $docs = $db->query("SELECT id, filename, created_at FROM bot_docs ORDER BY created_at DESC")->fetchAll();
-    return $twig->render($response, 'documents.twig', [
-        'docs' => $docs,
-        'currentPage' => 'documents',
-    ]);
+    return $twig->render($response, 'documents.twig', ['docs' => $docs, 'currentPage' => 'documents']);
 })->setName('documents')->add($authMiddleware);
 
 $app->post('/documents/upload', function (Request $request, Response $response) use ($db, $embeddingService, $app) {
     $uploadedFile = $request->getUploadedFiles()['document'];
     if ($uploadedFile->getError() === UPLOAD_ERR_OK) {
-        $filename = $uploadedFile->getClientFilename();
-        $uploadPath = APP_ROOT . '/uploads/' . $filename;
-        $uploadedFile->moveTo($uploadPath);
-
-        $content = file_get_contents($uploadPath);
+        $uploadDir = APP_ROOT . '/uploads';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0775, true);
+        }
+        $basename = basename($uploadedFile->getClientFilename());
+        $targetPath = $uploadDir . '/' . $basename;
+        $uploadedFile->moveTo($targetPath);
+        $content = file_get_contents($targetPath);
         $checksum = hash('sha256', $content);
-
-        // Check for duplicates
         $stmt = $db->prepare("SELECT id FROM bot_docs WHERE checksum = ?");
         $stmt->execute([$checksum]);
         if ($stmt->fetch()) {
-            // Handle duplicate file
-            unlink($uploadPath);
+            unlink($targetPath);
         } else {
             $stmt = $db->prepare("INSERT INTO bot_docs (filename, path, checksum) VALUES (?, ?, ?)");
-            $stmt->execute([$filename, $uploadPath, $checksum]);
+            $stmt->execute([$basename, $targetPath, $checksum]);
             $docId = $db->lastInsertId();
             $embeddingService->generateAndStoreEmbeddings((int)$docId, $content);
         }
@@ -154,11 +152,7 @@ $app->post('/documents/upload', function (Request $request, Response $response) 
 $app->get('/models', function (Request $request, Response $response) use ($twig, $db, $apiClient) {
     $apiModels = $apiClient->getModels();
     $settings = $db->query("SELECT default_model FROM bot_settings WHERE id = 1")->fetch();
-    return $twig->render($response, 'models.twig', [
-        'models' => $apiModels['data'] ?? [],
-        'current_model' => $settings['default_model'] ?? '',
-        'currentPage' => 'models',
-    ]);
+    return $twig->render($response, 'models.twig', ['models' => $apiModels['data'] ?? [], 'current_model' => $settings['default_model'] ?? '', 'currentPage' => 'models']);
 })->setName('models')->add($authMiddleware);
 
 $app->post('/models', function (Request $request, Response $response) use ($db, $app) {
@@ -176,31 +170,34 @@ $app->map(['GET', 'POST'], '/prompt', function (Request $request, Response $resp
         return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('prompt'))->withStatus(302);
     }
     $settings = $db->query("SELECT system_prompt FROM bot_settings WHERE id = 1")->fetch();
-    return $twig->render($response, 'prompt.twig', [
-        'system_prompt' => $settings['system_prompt'] ?? '',
-        'currentPage' => 'prompt',
-    ]);
+    return $twig->render($response, 'prompt.twig', ['system_prompt' => $settings['system_prompt'] ?? '', 'currentPage' => 'prompt']);
 })->setName('prompt')->add($authMiddleware);
 
 $app->map(['GET', 'POST'], '/onboarding', function (Request $request, Response $response) use ($twig, $db, $app) {
     if ($request->getMethod() === 'POST') {
         $groupQuestions = $request->getParsedBody()['group_questions'] ?? '';
         $dmQuestions = $request->getParsedBody()['dm_questions'] ?? '';
-
         $groupJson = json_encode(array_filter(array_map('trim', explode("\n", $groupQuestions))));
         $dmJson = json_encode(array_filter(array_map('trim', explode("\n", $dmQuestions))));
-
         $stmt = $db->prepare("UPDATE bot_settings SET onboarding_group_questions = ?, onboarding_dm_questions = ? WHERE id = 1");
         $stmt->execute([$groupJson, $dmJson]);
         return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('onboarding'))->withStatus(302);
     }
-
     $settings = $db->query("SELECT onboarding_group_questions, onboarding_dm_questions FROM bot_settings WHERE id = 1")->fetch();
-    return $twig->render($response, 'onboarding.twig', [
-        'group_questions' => implode("\n", json_decode($settings['onboarding_group_questions'] ?? '[]', true)),
-        'dm_questions' => implode("\n", json_decode($settings['onboarding_dm_questions'] ?? '[]', true)),
-        'currentPage' => 'onboarding',
-    ]);
+    return $twig->render($response, 'onboarding.twig', ['group_questions' => implode("\n", json_decode($settings['onboarding_group_questions'] ?? '[]', true)), 'dm_questions' => implode("\n", json_decode($settings['onboarding_dm_questions'] ?? '[]', true)), 'currentPage' => 'onboarding']);
 })->setName('onboarding')->add($authMiddleware);
+
+$app->map(['GET', 'POST'], '/rag-settings', function (Request $request, Response $response) use ($twig, $db, $app, $apiClient) {
+    if ($request->getMethod() === 'POST') {
+        $body = $request->getParsedBody();
+        $stmt = $db->prepare("UPDATE bot_settings SET embedding_model = ?, rag_top_k = ?, rag_chunk_size = ?, rag_chunk_overlap = ? WHERE id = 1");
+        $stmt->execute([$body['embedding_model'] ?? 'e5-mistral-7b-instruct', (int)($body['rag_top_k'] ?? 3), (int)($body['rag_chunk_size'] ?? 250), (int)($body['rag_chunk_overlap'] ?? 25)]);
+        return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('rag-settings'))->withStatus(302);
+    }
+    $models = $apiClient->getModels()['data'] ?? [];
+    $embeddingModels = array_filter($models, fn($m) => strpos($m['id'], 'e5') !== false || strpos($m['id'], 'embed') !== false);
+    $settings = $db->query("SELECT * FROM bot_settings WHERE id = 1")->fetch();
+    return $twig->render($response, 'rag_settings.twig', ['settings' => $settings, 'embeddingModels' => $embeddingModels, 'currentPage' => 'rag-settings']);
+})->setName('rag-settings')->add($authMiddleware);
 
 $app->run(); 

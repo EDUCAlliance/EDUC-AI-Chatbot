@@ -1,29 +1,24 @@
 {% include "_header.twig" %}
 
 <section class="section">
-    <div class="container">
+    <div class="container is-fluid">
         <div class="columns">
             {% if session.admin_logged_in %}
-            <div class="column is-one-fifth">
-                <aside class="menu">
-                    <p class="menu-label">
-                        General
-                    </p>
+            <div class="column is-2">
+                <aside class="menu is-hidden-mobile">
+                    <p class="menu-label">General</p>
                     <ul class="menu-list">
                         <li><a href="{{ url_for('dashboard') }}" class="{{ currentPage == 'dashboard' ? 'is-active' : '' }}">Dashboard</a></li>
                         <li><a href="{{ url_for('documents') }}" class="{{ currentPage == 'documents' ? 'is-active' : '' }}">Documents</a></li>
                     </ul>
-                    <p class="menu-label">
-                        Configuration
-                    </p>
+                    <p class="menu-label">Configuration</p>
                     <ul class="menu-list">
                         <li><a href="{{ url_for('models') }}" class="{{ currentPage == 'models' ? 'is-active' : '' }}">Models</a></li>
                         <li><a href="{{ url_for('prompt') }}" class="{{ currentPage == 'prompt' ? 'is-active' : '' }}">System Prompt</a></li>
                         <li><a href="{{ url_for('onboarding') }}" class="{{ currentPage == 'onboarding' ? 'is-active' : '' }}">Onboarding</a></li>
+                        <li><a href="{{ url_for('rag-settings') }}" class="{{ currentPage == 'rag-settings' ? 'is-active' : '' }}">RAG Settings</a></li>
                     </ul>
-                    <p class="menu-label">
-                        Account
-                    </p>
+                    <p class="menu-label">Account</p>
                     <ul class="menu-list">
                         <li><a href="{{ url_for('logout') }}">Logout</a></li>
                     </ul>
@@ -31,11 +26,10 @@
             </div>
             {% endif %}
 
-            <div class="column">
+            <div class="column is-10">
                 <div class="page-header">
-                     <h1 class="title">{% block heading %}{% endblock %}</h1>
+                     <h1 class="title is-4">{% block heading %}{% endblock %}</h1>
                 </div>
-                
                 {% block content %}{% endblock %}
             </div>
         </div>

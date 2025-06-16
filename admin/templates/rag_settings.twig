@@ -1,0 +1,58 @@
+{% extends "layout.twig" %}
+
+{% block title %}RAG Configuration{% endblock %}
+{% block heading %}RAG Configuration{% endblock %}
+
+{% block content %}
+<div class="box">
+    <form action="{{ url_for('rag-settings') }}" method="post">
+        <div class="field">
+            <label class="label">Embedding Model</label>
+            <div class="control">
+                <div class="select is-fullwidth">
+                    <select name="embedding_model">
+                        {% for model in embeddingModels %}
+                            <option value="{{ model.id }}" {{ model.id == settings.embedding_model ? 'selected' : '' }}>
+                                {{ model.id }}
+                            </option>
+                        {% else %}
+                             <option value="e5-mistral-7b-instruct" selected>e5-mistral-7b-instruct (default)</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <p class="help">The model used to create numerical representations (embeddings) of your documents. The API only provides a few models suitable for this.</p>
+        </div>
+
+        <div class="field">
+            <label class="label">Top-K</label>
+            <div class="control">
+                <input class="input" type="number" name="rag_top_k" value="{{ settings.rag_top_k }}">
+            </div>
+            <p class="help">The maximum number of relevant document chunks to retrieve from the database to use as context for the AI.</p>
+        </div>
+
+        <div class="field">
+            <label class="label">Chunk Size</label>
+            <div class="control">
+                <input class="input" type="number" name="rag_chunk_size" value="{{ settings.rag_chunk_size }}">
+            </div>
+            <p class="help">The target size of each text chunk (in words) when splitting up documents for embedding. Larger chunks preserve more context but can be less specific.</p>
+        </div>
+        
+        <div class="field">
+            <label class="label">Chunk Overlap</label>
+            <div class="control">
+                <input class="input" type="number" name="rag_chunk_overlap" value="{{ settings.rag_chunk_overlap }}">
+            </div>
+            <p class="help">The number of words that will overlap between consecutive chunks. This helps maintain context across chunk boundaries.</p>
+        </div>
+
+        <div class="field">
+            <div class="control">
+                <button class="button is-primary" type="submit">Save RAG Settings</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %} 

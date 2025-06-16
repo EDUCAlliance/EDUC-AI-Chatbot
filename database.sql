@@ -19,7 +19,11 @@ CREATE TABLE IF NOT EXISTS bot_settings (
   default_model TEXT DEFAULT 'meta-llama-3.1-8b-instruct',
   system_prompt TEXT,
   onboarding_group_questions JSONB,
-  onboarding_dm_questions JSONB
+  onboarding_dm_questions JSONB,
+  embedding_model TEXT DEFAULT 'e5-mistral-7b-instruct',
+  rag_top_k INTEGER DEFAULT 3,
+  rag_chunk_size INTEGER DEFAULT 250,
+  rag_chunk_overlap INTEGER DEFAULT 25
 );
 
 -- Stores metadata about uploaded documents for RAG.

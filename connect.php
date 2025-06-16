@@ -128,10 +128,15 @@ $stmt = $db->prepare("INSERT INTO bot_conversations (room_token, user_id, role, 
 $stmt->execute([$roomToken, $userId, $message]);
 
 // --- 5. RAG Context ---
-$embeddingResponse = $apiClient->getEmbedding($message);
+$settingsStmt = $db->query("SELECT embedding_model, rag_top_k FROM bot_settings WHERE id = 1");
+$ragSettings = $settingsStmt->fetch();
+$embeddingModel = $ragSettings['embedding_model'] ?? 'e5-mistral-7b-instruct';
+$topK = (int)($ragSettings['rag_top_k'] ?? 3);
+
+$embeddingResponse = $apiClient->getEmbedding($message, $embeddingModel);
 $ragContext = '';
 if (!isset($embeddingResponse['error']) && !empty($embeddingResponse['data'][0]['embedding'])) {
-    $similarChunks = $vectorStore->findSimilar($embeddingResponse['data'][0]['embedding'], 3);
+    $similarChunks = $vectorStore->findSimilar($embeddingResponse['data'][0]['embedding'], $topK);
     if (!empty($similarChunks)) {
         $ragContext = "Here is some context that might be relevant:\n\n---\n" . implode("\n\n", $similarChunks) . "\n---\n\n";
     }
