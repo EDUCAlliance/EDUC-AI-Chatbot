@@ -25,6 +25,12 @@ $app->setBasePath($basePath);
 
 // --- Twig Templates ---
 $twig = Twig::create(__DIR__ . '/templates', ['cache' => false]);
+
+// Make session data available to all Twig templates
+Session::start();
+$twig->getEnvironment()->addGlobal('session', $_SESSION['nextcloud_bot_session'] ?? []);
+
+// The `url_for` function in Twig needs the RouteParser, which TwigMiddleware adds to the container
 $app->add(TwigMiddleware::create($app, $twig));
 
 // --- Database & Schema ---
