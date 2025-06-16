@@ -7,9 +7,11 @@ A sophisticated AI-powered chatbot for Nextcloud Talk with RAG (Retrieval-Augmen
 ### Core Chatbot Features
 - **Nextcloud Talk Integration**: Native webhook support for seamless chat integration
 - **Multi-Model Support**: Compatible with GWDG SAIA API (Llama, Gemma, Mistral, Qwen models)
-- **Context-Aware Conversations**: Maintains conversation history and context
+- **Context-Aware Conversations**: Maintains conversation history and context with proper scoping
 - **Group & Individual Chat Support**: Handles both private messages and group discussions
-- **Onboarding System**: Intelligent user/group onboarding with customizable questions
+- **Smart Onboarding System**: Automatic chat configuration with mention preferences and chat type detection
+- **Chat Reset Functionality**: Complete conversation reset with `((RESET))` command and confirmation
+- **Message History Scoping**: User-specific history for one-on-one chats, group-wide for group chats
 
 ### RAG (Retrieval-Augmented Generation)
 - **Document Processing**: Support for PDF, DOCX, TXT, MD, HTML, CSV, JSON files
@@ -200,17 +202,30 @@ Access the admin panel at `/admin/` with your configured credentials.
 
 ### Chatbot Interaction
 
-#### Individual Chats
-1. User starts conversation with bot
-2. Bot presents onboarding questions (if configured)
-3. Bot learns user preferences and context
-4. Ongoing conversations use RAG and conversation history
+#### Initial Setup (Both Individual & Group Chats)
+1. **Welcome & Mention Preference**: Bot asks whether to respond to every message or only when mentioned
+2. **Chat Type Detection**: Bot asks if this is a one-on-one chat or group chat
+3. **Custom Onboarding Questions**: Bot asks configured questions based on chat type
+4. **Configuration Complete**: Bot is ready for normal conversation
 
-#### Group Chats
-1. Bot monitors for mentions or direct messages
-2. Group-specific onboarding process
-3. Context-aware responses considering group dynamics
-4. RAG-enhanced responses with relevant documentation
+#### Individual Chats
+- Message history is scoped to the specific user and chat
+- Bot responds to all messages (if configured during onboarding)
+- Personalized responses based on onboarding answers
+- RAG-enhanced responses with relevant documentation
+
+#### Group Chats  
+- Message history is shared across all group participants
+- Bot responds based on mention preference (every message or only when mentioned)
+- Group-specific context and responses
+- RAG-enhanced responses considering group dynamics
+
+#### Special Commands
+- **`((RESET))`**: Initiates complete chat reset with confirmation prompt
+  - Asks for "YES" confirmation before proceeding
+  - Clears all conversation history and configuration
+  - Restarts onboarding process from the beginning
+  - Can be cancelled by typing anything other than "YES"
 
 ### RAG Features
 

@@ -333,4 +333,171 @@ function renderAlert(string $message, string $type = 'info', bool $dismissible =
         htmlspecialchars($message),
         $dismissButton
     );
-} 
+}
+
+/**
+ * Get available AI models from GWDG SAIA API
+ */
+function getAvailableModels(): array {
+    try {
+        $apiKey = getenv('AI_API_KEY');
+        $modelsEndpoint = getenv('MODELS_API_ENDPOINT') ?: 'https://chat-ai.academiccloud.de/v1/models';
+        
+        if (!$apiKey) {
+            throw new Exception('AI_API_KEY not configured');
+        }
+        
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $modelsEndpoint,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $apiKey,
+                'Accept: application/json',
+                'Content-Type: application/json'
+            ],
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_SSL_VERIFYPEER => false
+        ]);
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        
+        if (curl_errno($ch)) {
+            throw new Exception('cURL error: ' . curl_error($ch));
+        }
+        
+        curl_close($ch);
+        
+        if ($httpCode !== 200) {
+            throw new Exception('API returned HTTP ' . $httpCode);
+        }
+        
+        $data = json_decode($response, true);
+        if (!$data || !isset($data['data'])) {
+            throw new Exception('Invalid API response format');
+        }
+        
+        return $data['data'];
+        
+    } catch (Exception $e) {
+        error_log('Failed to fetch models: ' . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Get current setting value
+ */
+function getCurrentSetting(string $key): ?string {
+    try {
+        $db = \EDUC\Database\Database::getInstance();
+        $settings = $db->getAllSettings();
+        return $settings[$key]['value'] ?? null;
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+/**
+ * Format file size for display
+ */
+function formatFileSize(int $bytes): string {
+    return formatBytes($bytes);
+}
+
+/**
+ * Check pgvector extension availability
+ */
+function checkPgvectorExtension(): bool {
+    try {
+        $db = \EDUC\Database\Database::getInstance();
+        $connection = $db->getConnection();
+        $connection->exec("CREATE EXTENSION IF NOT EXISTS vector");
+        return true;
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+/**
+ * Handle file upload for RAG documents
+ */
+function handleFileUpload(array $files): array {
+    if (!isset($files['documents']) || empty($files['documents']['name'][0])) {
+        return ['message' => 'No files selected', 'type' => 'danger'];
+    }
+    
+    // This is a placeholder implementation
+    return [
+        'message' => 'File upload functionality needs to be fully implemented',
+        'type' => 'info'
+    ];
+}
+
+/**
+ * Process documents for RAG
+ */
+function processDocuments(): array {
+    // This is a placeholder implementation
+    return [
+        'message' => 'Document processing functionality needs to be implemented',
+        'type' => 'info'
+    ];
+}
+
+/**
+ * Clear RAG data
+ */
+function clearRAGData(): array {
+    try {
+        $db = \EDUC\Database\Database::getInstance();
+        $prefix = $db->getTablePrefix();
+        
+        // Clear embeddings and documents (when tables exist)
+        // $db->execute("DELETE FROM {$prefix}embeddings");
+        // $db->execute("DELETE FROM {$prefix}documents");
+        
+        return [
+            'message' => 'RAG data clearing functionality needs to be implemented',
+            'type' => 'info'
+        ];
+    } catch (Exception $e) {
+        return [
+            'message' => 'Failed to clear RAG data: ' . $e->getMessage(),
+            'type' => 'danger'
+        ];
+    }
+}
+
+/**
+ * Get uploaded documents list
+ */
+function getUploadedDocuments(): array {
+    try {
+        $db = \EDUC\Database\Database::getInstance();
+        $prefix = $db->getTablePrefix();
+        
+        // When documents table exists:
+        // $result = $db->query("SELECT * FROM {$prefix}documents ORDER BY created_at DESC");
+        // return $result;
+        
+        return []; // Empty for now
+    } catch (Exception $e) {
+        return [];
+    }
+}
+
+/**
+ * Get current user information
+ */
+function getCurrentUser(): array {
+    return [
+        'id' => 1,
+        'username' => 'admin',
+        'full_name' => 'Administrator',
+        'email' => 'admin@example.com',
+        'role' => 'administrator'
+    ];
+}
+?> 
