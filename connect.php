@@ -476,13 +476,52 @@ $historyStmt->execute([$roomToken]);
 $history = array_reverse($historyStmt->fetchAll());
 
 // Fetch system prompt and model
-$settingsStmt = $db->query("SELECT system_prompt, default_model FROM bot_settings WHERE id = 1");
-$globalSettings = $settingsStmt->fetch() ?: ['system_prompt' => 'You are a helpful assistant.', 'default_model' => 'meta-llama-3.1-8b-instruct'];
+$settingsStmt = $db->query("SELECT system_prompt, default_model, onboarding_group_questions, onboarding_dm_questions FROM bot_settings WHERE id = 1");
+$globalSettings = $settingsStmt->fetch() ?: [
+    'system_prompt' => 'You are a helpful assistant.', 
+    'default_model' => 'meta-llama-3.1-8b-instruct',
+    'onboarding_group_questions' => '[]',
+    'onboarding_dm_questions' => '[]'
+];
 $systemPrompt = $globalSettings['system_prompt'];
 $model = $globalSettings['default_model'];
 
+// --- Inject Onboarding Context into System Prompt ---
+$onboardingContext = '';
+$stmt = $db->prepare("SELECT is_group, mention_mode, meta FROM bot_room_config WHERE room_token = ? AND onboarding_done = TRUE");
+$stmt->execute([$roomToken]);
+$roomConfigForPrompt = $stmt->fetch();
+
+if ($roomConfigForPrompt) {
+    $isGroup = (bool) $roomConfigForPrompt['is_group'];
+    $mentionMode = $roomConfigForPrompt['mention_mode'];
+    $meta = json_decode($roomConfigForPrompt['meta'], true);
+    $answers = $meta['answers'] ?? [];
+
+    $onboardingContext .= "\n\n--- User Onboarding Context ---\n";
+    $onboardingContext .= "Chat Type: " . ($isGroup ? "Group Chat" : "Direct Message") . "\n";
+    $onboardingContext .= "Bot Interaction Style: " . ($mentionMode === 'always' ? "Respond to every message" : "Respond only when mentioned (@" . $mentionName . ")") . "\n";
+
+    $questionsRaw = $isGroup
+        ? ($globalSettings['onboarding_group_questions'] ?? '[]')
+        : ($globalSettings['onboarding_dm_questions'] ?? '[]');
+    $questions = json_decode($questionsRaw, true) ?: [];
+
+    if (!empty($answers) && !empty($questions)) {
+        $onboardingContext .= "Additional User Answers:\n";
+        foreach ($answers as $index => $answer) {
+            if (isset($questions[$index])) {
+                $onboardingContext .= "- Q: " . $questions[$index] . "\n";
+                $onboardingContext .= "  A: " . $answer . "\n";
+            }
+        }
+    }
+    $onboardingContext .= "---------------------------\n";
+}
+// --- End Onboarding Context Injection ---
+
 // Compose messages for API
-$messages = [['role' => 'system', 'content' => $ragContext . $systemPrompt]];
+$messages = [['role' => 'system', 'content' => $onboardingContext . $ragContext . $systemPrompt]];
 foreach ($history as $msg) {
     $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
 }
