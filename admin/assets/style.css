@@ -476,7 +476,7 @@ html {
 }
 
 .notification.is-info::before {
-    background: linear-gradient(90deg, var(--primary-color), #60a5fa);
+    background: linear-gradient(90deg, var(--educ-green), var(--educ-pink));
 }
 
 .notification .delete {
@@ -1048,7 +1048,10 @@ html {
     width: 20px;
     height: 20px;
     border: 2px solid transparent;
-    border-top: 2px solid var(--primary-color);
+    border-top: 2px solid var(--educ-green);
+    border-right: 2px solid var(--educ-pink);
+    border-bottom: 2px solid var(--educ-coral);
+    border-left: 2px solid var(--educ-purple);
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
