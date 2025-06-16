@@ -29,6 +29,27 @@ $app->add(TwigMiddleware::create($app, $twig));
 $db = NextcloudBot\getDbConnection();
 $logger = new \NextcloudBot\Helpers\Logger();
 
+// --- Auto-DB-Schema Installation ---
+try {
+    // Check if a key table exists. If not, create schema.
+    $db->query("SELECT 1 FROM bot_admin LIMIT 1");
+} catch (\PDOException $e) {
+    // Error 42P01 in PostgreSQL means "undefined table"
+    if ($e->getCode() === '42P01') {
+        try {
+            $sql = file_get_contents(__DIR__ . '/../database.sql');
+            $db->exec($sql);
+        } catch (\Exception $initError) {
+            // If schema creation fails, stop execution.
+            http_response_code(500);
+            die("Database schema initialization failed: " . $initError->getMessage());
+        }
+    } else {
+        // For other DB errors, re-throw the exception.
+        throw $e;
+    }
+}
+
 // --- Middleware for Auth ---
 $authMiddleware = function (Request $request, $handler) {
     Session::start();
@@ -69,7 +90,7 @@ if (!$adminExists) {
          return $response->withHeader('Location', '/admin/setup')->withStatus(302);
     });
 
-} else {
+            } else {
     // --- Standard Routes ---
     $app->map(['GET', 'POST'], '/login', function (Request $request, Response $response) use ($db, $twig) {
         if ($request->getMethod() === 'POST') {
