@@ -390,31 +390,37 @@ if ($roomConfig['onboarding_done'] == false) {
 
     // AFTER processing answer, check if we've just identified a DM and should search for previous onboarding data
     if (($roomConfig['is_group'] ?? true) === false && $roomConfig['meta']['stage'] === 1 && !isset($roomConfig['meta']['reuse_state'])) {
-        // Search for an earlier DM room by the same user that has completed onboarding
-        $sql = "SELECT brc.* FROM bot_room_config brc
-                JOIN bot_conversations bc ON bc.room_token = brc.room_token AND bc.user_id = :user
-                WHERE brc.is_group = FALSE AND brc.onboarding_done = TRUE
-                ORDER BY brc.updated_at DESC LIMIT 1";
-        $stmt = $db->prepare($sql);
-        $stmt->execute([':user' => $userId]);
-        $prevConfig = $stmt->fetch();
-        if ($prevConfig) {
-            $prevMeta = json_decode($prevConfig['meta'], true);
-            $roomConfig['meta']['reuse_state'] = 'pending';
-            $roomConfig['meta']['reuse_data'] = [
-                'mention_mode' => $prevConfig['mention_mode'],
-                'answers' => $prevMeta['answers'] ?? []
-            ];
-            // Save meta
-            $stmt2 = $db->prepare("UPDATE bot_room_config SET meta = :meta WHERE room_token = :room_token");
-            $stmt2->execute([
-                ':meta' => json_encode($roomConfig['meta']),
-                ':room_token' => $roomConfig['room_token']
-            ]);
+        try {
+            // Search for an earlier DM room by the same user that has completed onboarding
+            $sql = "SELECT brc.* FROM bot_room_config brc
+                    JOIN bot_conversations bc ON bc.room_token = brc.room_token AND bc.user_id = :user
+                    WHERE brc.is_group = FALSE AND brc.onboarding_done = TRUE
+                    ORDER BY brc.updated_at DESC LIMIT 1";
+            $stmt = $db->prepare($sql);
+            $stmt->execute([':user' => $userId]);
+            $prevConfig = $stmt->fetch();
+            if ($prevConfig) {
+                $prevMeta = json_decode($prevConfig['meta'], true);
+                $roomConfig['meta']['reuse_state'] = 'pending';
+                $roomConfig['meta']['reuse_data'] = [
+                    'mention_mode' => $prevConfig['mention_mode'],
+                    'answers' => $prevMeta['answers'] ?? []
+                ];
+                // Save meta
+                $stmt2 = $db->prepare("UPDATE bot_room_config SET meta = :meta WHERE room_token = :room_token");
+                $stmt2->execute([
+                    ':meta' => json_encode($roomConfig['meta']),
+                    ':room_token' => $roomConfig['room_token']
+                ]);
 
-            $reuseQuestion = "I found previous onboarding answers for you. Reply 'use' to reuse them or 'reset' to start fresh.";
-            sendReply($reuseQuestion, $roomToken, $messageId, $ncUrl, $secret, $logger);
-            exit;
+                $reuseQuestion = "I found previous onboarding answers for you. Reply 'use' to reuse them or 'reset' to start fresh.";
+                sendReply($reuseQuestion, $roomToken, $messageId, $ncUrl, $secret, $logger);
+                exit;
+            }
+        } catch (\PDOException $e) {
+            $logger->error('Failed to search for previous user config', ['error' => $e->getMessage(), 'user' => $userId]);
+            // Do not exit. Just log the error and fall through to the next question,
+            // making the experience consistent with the 'group' path.
         }
     }
 
