@@ -476,15 +476,44 @@ document.addEventListener('DOMContentLoaded', () => {
         if (trigger && menu) {
             let timeout;
             
-            dropdown.addEventListener('mouseenter', () => {
-                clearTimeout(timeout);
-                dropdown.classList.add('is-active');
-            });
+            // Desktop hover behavior
+            if (window.innerWidth > 768) {
+                dropdown.addEventListener('mouseenter', () => {
+                    clearTimeout(timeout);
+                    dropdown.classList.add('is-active');
+                });
+                
+                dropdown.addEventListener('mouseleave', () => {
+                    timeout = setTimeout(() => {
+                        dropdown.classList.remove('is-active');
+                    }, 200);
+                });
+            }
             
-            dropdown.addEventListener('mouseleave', () => {
-                timeout = setTimeout(() => {
-                    dropdown.classList.remove('is-active');
-                }, 200);
+            // Mobile/tablet click behavior
+            trigger.addEventListener('click', (e) => {
+                if (window.innerWidth <= 768) {
+                    e.preventDefault();
+                    
+                    // Close other dropdowns
+                    document.querySelectorAll('.navbar-item.has-dropdown.is-active').forEach(otherDropdown => {
+                        if (otherDropdown !== dropdown) {
+                            otherDropdown.classList.remove('is-active');
+                        }
+                    });
+                    
+                    // Toggle current dropdown
+                    dropdown.classList.toggle('is-active');
+                }
+            });
+        }
+    });
+    
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.navbar-item.has-dropdown')) {
+            document.querySelectorAll('.navbar-item.has-dropdown.is-active').forEach(dropdown => {
+                dropdown.classList.remove('is-active');
             });
         }
     });

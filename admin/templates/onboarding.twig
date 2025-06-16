@@ -141,9 +141,23 @@
                                     <span>Group Chat Questions</span>
                                 </span>
                             </label>
+                            <div class="notification is-info is-light mb-3">
+                                <p class="has-text-weight-semibold mb-1">
+                                    <span class="icon-text">
+                                        <span class="icon">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <circle cx="12" cy="12" r="10"/>
+                                                <path d="m9 12 2 2 4-4"/>
+                                            </svg>
+                                        </span>
+                                        <span>Each line break = New question</span>
+                                    </span>
+                                </p>
+                                <p class="is-size-7">Enter one question per line. The bot will ask each question separately during onboarding.</p>
+                            </div>
                             <div class="control">
                                 <textarea class="textarea is-medium" name="group_questions" id="groupQuestions" 
-                                          rows="8" placeholder="One question per line&#10;Example:&#10;What topics are you interested in learning about?&#10;How can I help your team today?">{{ group_questions }}</textarea>
+                                          rows="8" placeholder="What topics are you interested in learning about?&#10;How can I help your team today?&#10;What are your current learning goals?">{{ group_questions }}</textarea>
                             </div>
                             <div class="level is-mobile mt-2">
                                 <div class="level-left">
@@ -172,9 +186,23 @@
                                     <span>Direct Message Questions</span>
                                 </span>
                             </label>
+                            <div class="notification is-info is-light mb-3">
+                                <p class="has-text-weight-semibold mb-1">
+                                    <span class="icon-text">
+                                        <span class="icon">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <circle cx="12" cy="12" r="10"/>
+                                                <path d="m9 12 2 2 4-4"/>
+                                            </svg>
+                                        </span>
+                                        <span>Each line break = New question</span>
+                                    </span>
+                                </p>
+                                <p class="is-size-7">Enter one question per line. The bot will ask each question separately during onboarding.</p>
+                            </div>
                             <div class="control">
                                 <textarea class="textarea is-medium" name="dm_questions" id="dmQuestions" 
-                                          rows="8" placeholder="One question per line&#10;Example:&#10;What would you like to learn about today?&#10;How can I assist you with your research?">{{ dm_questions }}</textarea>
+                                          rows="8" placeholder="What would you like to learn about today?&#10;How can I assist you with your research?&#10;What are your specific learning objectives?">{{ dm_questions }}</textarea>
                             </div>
                             <div class="level is-mobile mt-2">
                                 <div class="level-left">

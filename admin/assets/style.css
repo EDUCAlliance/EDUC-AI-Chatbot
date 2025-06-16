@@ -4,14 +4,29 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-    --primary-color: #3b82f6;
-    --primary-dark: #1e40af;
-    --primary-light: #dbeafe;
-    --secondary-color: #8b5cf6;
-    --secondary-light: #e9d5ff;
-    --success-color: #10b981;
+    /* EDUC Brand Colors */
+    --educ-green: #4ade80;
+    --educ-green-dark: #22c55e;
+    --educ-green-light: #dcfce7;
+    --educ-pink: #f472b6;
+    --educ-pink-dark: #ec4899;
+    --educ-pink-light: #fce7f3;
+    --educ-coral: #fb7185;
+    --educ-coral-dark: #f43f5e;
+    --educ-coral-light: #ffe4e6;
+    --educ-purple: #a855f7;
+    --educ-purple-dark: #9333ea;
+    --educ-purple-light: #f3e8ff;
+    
+    /* Primary colors using EDUC Green */
+    --primary-color: var(--educ-green);
+    --primary-dark: var(--educ-green-dark);
+    --primary-light: var(--educ-green-light);
+    --secondary-color: var(--educ-purple);
+    --secondary-light: var(--educ-purple-light);
+    --success-color: var(--educ-green);
     --warning-color: #f59e0b;
-    --danger-color: #ef4444;
+    --danger-color: var(--educ-coral);
     --dark-bg: #1f2937;
     --darker-bg: #111827;
     --light-bg: #f8fafc;
@@ -94,8 +109,12 @@ html {
 }
 
 .brand-logo svg {
-    color: var(--primary-color);
-    filter: drop-shadow(0 2px 4px rgba(59, 130, 246, 0.1));
+    filter: drop-shadow(0 2px 8px rgba(74, 222, 128, 0.3));
+    transition: transform 0.3s ease;
+}
+
+.brand-logo:hover svg {
+    transform: scale(1.05);
 }
 
 .brand-text {
@@ -151,10 +170,14 @@ html {
 
 .navbar-dropdown {
     border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-xl);
     border-radius: var(--radius-lg);
     margin-top: var(--spacing-sm);
     overflow: hidden;
+    z-index: 2100;
+    position: absolute;
+    right: 0;
+    top: 100%;
 }
 
 .navbar-dropdown .navbar-item {
@@ -164,11 +187,31 @@ html {
     padding: var(--spacing-md);
     transition: all 0.2s ease;
     color: var(--text-primary);
+    min-width: 200px;
+    white-space: nowrap;
 }
 
 .navbar-dropdown .navbar-item:hover {
     background-color: var(--primary-light);
     color: var(--primary-color);
+}
+
+.navbar-divider {
+    background-color: var(--border-color);
+    border: none;
+    display: block;
+    height: 1px;
+    margin: var(--spacing-xs) 0;
+}
+
+/* Navbar Dropdown Container */
+.navbar-item.has-dropdown {
+    position: relative;
+}
+
+.navbar-item.has-dropdown.is-hoverable:hover .navbar-dropdown,
+.navbar-item.has-dropdown.is-active .navbar-dropdown {
+    display: block;
 }
 
 /* Modern Sidebar */
@@ -256,10 +299,27 @@ html {
 }
 
 .menu-list a.is-active {
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    background: linear-gradient(135deg, var(--educ-green), var(--educ-green-dark));
     color: white;
     box-shadow: var(--shadow-md);
     font-weight: 600;
+    position: relative;
+    overflow: hidden;
+}
+
+.menu-list a.is-active::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.6s ease;
+}
+
+.menu-list a.is-active:hover::after {
+    left: 100%;
 }
 
 .menu-list a.is-active::before {
@@ -312,10 +372,18 @@ html {
     font-weight: 700;
     margin: 0;
     font-size: 2rem;
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    background: linear-gradient(135deg, var(--educ-green), var(--educ-pink), var(--educ-purple));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    animation: gradientShift 6s ease-in-out infinite;
+}
+
+@keyframes gradientShift {
+    0%, 100% { background: linear-gradient(135deg, var(--educ-green), var(--educ-pink), var(--educ-purple)); }
+    25% { background: linear-gradient(135deg, var(--educ-pink), var(--educ-coral), var(--educ-green)); }
+    50% { background: linear-gradient(135deg, var(--educ-purple), var(--educ-green), var(--educ-pink)); }
+    75% { background: linear-gradient(135deg, var(--educ-coral), var(--educ-purple), var(--educ-green)); }
 }
 
 /* Notification System */
@@ -492,7 +560,31 @@ html {
     left: 0;
     right: 0;
     height: 4px;
-    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+    background: linear-gradient(90deg, var(--educ-green), var(--educ-pink), var(--educ-coral), var(--educ-purple));
+    background-size: 400% 100%;
+    animation: gradientMove 8s ease-in-out infinite;
+}
+
+@keyframes gradientMove {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+/* Different colored stat cards */
+.stat-card:nth-child(1)::before {
+    background: linear-gradient(90deg, var(--educ-green), var(--educ-green-dark));
+}
+
+.stat-card:nth-child(2)::before {
+    background: linear-gradient(90deg, var(--educ-pink), var(--educ-pink-dark));
+}
+
+.stat-card:nth-child(3)::before {
+    background: linear-gradient(90deg, var(--educ-coral), var(--educ-coral-dark));
+}
+
+.stat-card:nth-child(4)::before {
+    background: linear-gradient(90deg, var(--educ-purple), var(--educ-purple-dark));
 }
 
 .stat-card:hover {
@@ -512,9 +604,25 @@ html {
 .stat-card .title {
     font-size: 2.5rem;
     font-weight: 800;
-    color: var(--primary-color);
     margin: 0;
     line-height: 1;
+}
+
+/* Different colored stat card titles */
+.stat-card:nth-child(1) .title {
+    color: var(--educ-green);
+}
+
+.stat-card:nth-child(2) .title {
+    color: var(--educ-pink);
+}
+
+.stat-card:nth-child(3) .title {
+    color: var(--educ-coral);
+}
+
+.stat-card:nth-child(4) .title {
+    color: var(--educ-purple);
 }
 
 /* Enhanced Forms */
@@ -543,8 +651,8 @@ html {
 }
 
 .input:focus, .textarea:focus, .select select:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: var(--educ-green);
+    box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.15);
     outline: none;
     background: white;
 }
@@ -570,15 +678,32 @@ html {
 }
 
 .button.is-primary {
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-    border-color: var(--primary-color);
+    background: linear-gradient(135deg, var(--educ-green), var(--educ-green-dark));
+    border-color: var(--educ-green);
     color: white;
+    position: relative;
+    overflow: hidden;
 }
 
 .button.is-primary:hover {
-    background: linear-gradient(135deg, var(--primary-dark), var(--primary-color));
+    background: linear-gradient(135deg, var(--educ-green-dark), var(--educ-green));
     transform: translateY(-2px);
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 8px 25px rgba(74, 222, 128, 0.4);
+}
+
+.button.is-primary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s ease;
+}
+
+.button.is-primary:hover::before {
+    left: 100%;
 }
 
 .button.is-success {
@@ -615,13 +740,61 @@ html {
 }
 
 .button.is-link {
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    background: linear-gradient(135deg, var(--educ-pink), var(--educ-purple));
     color: white;
+    border: none;
+    position: relative;
+    overflow: hidden;
 }
 
 .button.is-link:hover {
+    background: linear-gradient(135deg, var(--educ-purple), var(--educ-pink));
     transform: translateY(-2px);
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 8px 25px rgba(244, 114, 182, 0.4);
+}
+
+.button.is-link::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s ease;
+}
+
+.button.is-link:hover::before {
+    left: 100%;
+}
+
+/* New EDUC brand button variants */
+.button.is-educ-coral {
+    background: linear-gradient(135deg, var(--educ-coral), var(--educ-coral-dark));
+    border-color: var(--educ-coral);
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.button.is-educ-coral:hover {
+    background: linear-gradient(135deg, var(--educ-coral-dark), var(--educ-coral));
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(251, 113, 133, 0.4);
+}
+
+.button.is-educ-purple {
+    background: linear-gradient(135deg, var(--educ-purple), var(--educ-purple-dark));
+    border-color: var(--educ-purple);
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.button.is-educ-purple:hover {
+    background: linear-gradient(135deg, var(--educ-purple-dark), var(--educ-purple));
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(168, 85, 247, 0.4);
 }
 
 .button.is-light {
@@ -774,14 +947,23 @@ html {
 }
 
 .progress::-webkit-progress-value {
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    background: linear-gradient(135deg, var(--educ-green), var(--educ-pink), var(--educ-purple));
     border-radius: var(--radius-lg);
     transition: all 0.3s ease;
+    background-size: 200% 100%;
+    animation: progressShimmer 2s ease-in-out infinite;
 }
 
 .progress::-moz-progress-bar {
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    background: linear-gradient(135deg, var(--educ-green), var(--educ-pink), var(--educ-purple));
     border-radius: var(--radius-lg);
+    background-size: 200% 100%;
+    animation: progressShimmer 2s ease-in-out infinite;
+}
+
+@keyframes progressShimmer {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
 }
 
 /* Tag Enhancements */
@@ -929,6 +1111,15 @@ html {
     
     .navbar-end {
         padding-right: var(--spacing-md);
+    }
+    
+    .navbar-dropdown {
+        position: static !important;
+        box-shadow: none;
+        border: none;
+        border-radius: 0;
+        margin-top: 0;
+        background: var(--light-bg);
     }
     
     .box, .card {
