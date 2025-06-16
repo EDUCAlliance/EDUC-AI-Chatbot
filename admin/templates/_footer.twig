@@ -190,19 +190,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const navbarBurger = document.querySelector('.navbar-burger');
     const sidebar = document.querySelector('.menu-sidebar');
     const navbarMenu = document.querySelector('.navbar-menu');
+    const sidebarOverlay = document.querySelector('.sidebar-overlay');
+    
+    function toggleMobileMenu(show) {
+        if (navbarBurger) {
+            navbarBurger.classList.toggle('is-active', show);
+        }
+        if (sidebar) {
+            sidebar.classList.toggle('is-active', show);
+        }
+        if (navbarMenu) {
+            navbarMenu.classList.toggle('is-active', show);
+        }
+        if (sidebarOverlay) {
+            sidebarOverlay.classList.toggle('is-active', show);
+        }
+        
+        // Prevent body scroll when mobile menu is open
+        document.body.style.overflow = show ? 'hidden' : '';
+    }
     
     if (navbarBurger) {
         navbarBurger.addEventListener('click', (e) => {
             e.preventDefault();
-            navbarBurger.classList.toggle('is-active');
-            
-            if (sidebar) {
-                sidebar.classList.toggle('is-active');
-            }
-            
-            if (navbarMenu) {
-                navbarMenu.classList.toggle('is-active');
-            }
+            const isActive = navbarBurger.classList.contains('is-active');
+            toggleMobileMenu(!isActive);
+        });
+    }
+    
+    // Close sidebar when clicking overlay
+    if (sidebarOverlay) {
+        sidebarOverlay.addEventListener('click', () => {
+            toggleMobileMenu(false);
         });
     }
     
@@ -212,16 +231,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const isClickInsideSidebar = sidebar && sidebar.contains(event.target);
             const isClickOnBurger = navbarBurger && navbarBurger.contains(event.target);
             const isClickInsideNavbar = navbarMenu && navbarMenu.contains(event.target);
+            const isClickOnOverlay = sidebarOverlay && sidebarOverlay.contains(event.target);
             
-            if (!isClickInsideSidebar && !isClickOnBurger && !isClickInsideNavbar) {
+            if (!isClickInsideSidebar && !isClickOnBurger && !isClickInsideNavbar && !isClickOnOverlay) {
                 if (sidebar && sidebar.classList.contains('is-active')) {
-                    sidebar.classList.remove('is-active');
-                }
-                if (navbarBurger && navbarBurger.classList.contains('is-active')) {
-                    navbarBurger.classList.remove('is-active');
-                }
-                if (navbarMenu && navbarMenu.classList.contains('is-active')) {
-                    navbarMenu.classList.remove('is-active');
+                    toggleMobileMenu(false);
                 }
             }
         }
