@@ -18,116 +18,92 @@ require __DIR__ . '/../src/bootstrap.php';
 
 // --- App Initialization ---
 $app = AppFactory::create();
-
-// Dynamically set the base path to handle running in a subdirectory
 $basePath = '/apps/' . (getenv('APP_DIRECTORY') ?: 'educ-ai-chatbot') . '/admin';
 $app->setBasePath($basePath);
 
 // --- Twig Templates ---
 $twig = Twig::create(__DIR__ . '/templates', ['cache' => false]);
-// The `url_for` function in Twig needs the RouteParser, which TwigMiddleware adds to the container
 $app->add(TwigMiddleware::create($app, $twig));
 
-// --- Database & Logger ---
+// --- Database & Schema ---
 $db = NextcloudBot\getDbConnection();
-$logger = new \NextcloudBot\Helpers\Logger();
-
-// --- Auto-DB-Schema Installation ---
 try {
-    // Check if a key table exists. If not, create schema.
     $db->query("SELECT 1 FROM bot_admin LIMIT 1");
 } catch (\PDOException $e) {
-    // Error 42P01 in PostgreSQL means "undefined table"
     if ($e->getCode() === '42P01') {
         try {
             $sql = file_get_contents(__DIR__ . '/../database.sql');
             $db->exec($sql);
         } catch (\Exception $initError) {
-            // If schema creation fails, stop execution.
             http_response_code(500);
             die("Database schema initialization failed: " . $initError->getMessage());
         }
     } else {
-        // For other DB errors, re-throw the exception.
         throw $e;
     }
 }
 
-// --- Middleware for Auth ---
+// --- Middleware & Initial State Check ---
+$adminExists = (bool) $db->query("SELECT id FROM bot_admin LIMIT 1")->fetchColumn();
+
 $authMiddleware = function (Request $request, $handler) use ($app) {
     Session::start();
     if (!Session::has('admin_logged_in')) {
         $response = new \Slim\Psr7\Response();
-        $loginUrl = $app->getRouteCollector()->getRouteParser()->urlFor('login');
-        return $response->withHeader('Location', $loginUrl)->withStatus(302);
+        return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('login'))->withStatus(302);
     }
     return $handler->handle($request);
 };
 
-// --- First Run Check ---
-$stmt = $db->query("SELECT id FROM bot_admin LIMIT 1");
-$adminExists = $stmt->fetchColumn();
+// --- Route Definitions ---
 
-if (!$adminExists) {
-    // --- First Run Setup Route ---
-    $app->map(['GET', 'POST'], '/setup', function (Request $request, Response $response) use ($db, $twig, $app) {
-        if ($request->getMethod() === 'POST') {
-            $password = $request->getParsedBody()['password'] ?? '';
-            $passwordConfirm = $request->getParsedBody()['password_confirm'] ?? '';
-
-            if ($password && $password === $passwordConfirm) {
-                $hash = password_hash($password, PASSWORD_BCRYPT);
-                $stmt = $db->prepare("INSERT INTO bot_admin (password_hash) VALUES (?)");
-                $stmt->execute([$hash]);
-                
-                $db->exec("INSERT INTO bot_settings (id, mention_name, onboarding_group_questions, onboarding_dm_questions) VALUES (1, '@educai', '[]', '[]') ON CONFLICT(id) DO NOTHING");
-
-                $loginUrl = $app->getRouteCollector()->getRouteParser()->urlFor('login');
-                return $response->withHeader('Location', $loginUrl)->withStatus(302);
-            }
+$app->map(['GET', 'POST'], '/setup', function (Request $request, Response $response) use ($db, $twig, $app, $adminExists) {
+    if ($adminExists) {
+        return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('login'))->withStatus(302);
+    }
+    if ($request->getMethod() === 'POST') {
+        $password = $request->getParsedBody()['password'] ?? '';
+        $passwordConfirm = $request->getParsedBody()['password_confirm'] ?? '';
+        if ($password && $password === $passwordConfirm) {
+            $hash = password_hash($password, PASSWORD_BCRYPT);
+            $db->prepare("INSERT INTO bot_admin (password_hash) VALUES (?)")->execute([$hash]);
+            $db->exec("INSERT INTO bot_settings (id) VALUES (1) ON CONFLICT(id) DO NOTHING");
+            return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('login'))->withStatus(302);
         }
-        return $twig->render($response, 'setup.twig');
-    })->setName('setup');
+    }
+    return $twig->render($response, 'setup.twig');
+})->setName('setup');
 
-    // Redirect all other requests to setup
-    $app->get('/{routes:.*}', function (Request $request, Response $response) use ($app) {
-         $setupUrl = $app->getRouteCollector()->getRouteParser()->urlFor('setup');
-         return $response->withHeader('Location', $setupUrl)->withStatus(302);
-    });
-            } else {
-    // --- Standard Routes ---
-    $app->map(['GET', 'POST'], '/login', function (Request $request, Response $response) use ($db, $twig, $app) {
-        if ($request->getMethod() === 'POST') {
-            $password = $request->getParsedBody()['password'] ?? '';
-            $stmt = $db->query("SELECT password_hash FROM bot_admin LIMIT 1");
-            $hash = $stmt->fetchColumn();
-
-            if (password_verify($password, $hash)) {
-                Session::start();
-                Session::regenerate();
-                Session::set('admin_logged_in', true);
-                $dashboardUrl = $app->getRouteCollector()->getRouteParser()->urlFor('dashboard');
-                return $response->withHeader('Location', $dashboardUrl)->withStatus(302);
-            }
+$app->map(['GET', 'POST'], '/login', function (Request $request, Response $response) use ($db, $twig, $app, $adminExists) {
+    if (!$adminExists) {
+        return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('setup'))->withStatus(302);
+    }
+    if ($request->getMethod() === 'POST') {
+        $password = $request->getParsedBody()['password'] ?? '';
+        $hash = $db->query("SELECT password_hash FROM bot_admin LIMIT 1")->fetchColumn();
+        if (password_verify($password, $hash)) {
+            Session::start();
+            Session::regenerate();
+            Session::set('admin_logged_in', true);
+            return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('dashboard'))->withStatus(302);
         }
-        return $twig->render($response, 'login.twig');
-    })->setName('login');
+    }
+    return $twig->render($response, 'login.twig');
+})->setName('login');
 
-    $app->get('/logout', function (Request $request, Response $response) use ($app) {
-        Session::destroy();
-        $loginUrl = $app->getRouteCollector()->getRouteParser()->urlFor('login');
-        return $response->withHeader('Location', $loginUrl)->withStatus(302);
-    })->setName('logout');
+$app->get('/logout', function (Request $request, Response $response) use ($app) {
+    Session::destroy();
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('login'))->withStatus(302);
+})->setName('logout');
 
-    $app->get('/', function (Request $request, Response $response) use ($twig, $db) {
-        $stats = [
-            'docs' => $db->query("SELECT COUNT(*) FROM bot_docs")->fetchColumn(),
-            'embeddings' => $db->query("SELECT COUNT(*) FROM bot_embeddings")->fetchColumn(),
-            'conversations' => $db->query("SELECT COUNT(*) FROM bot_conversations")->fetchColumn(),
-            'rooms' => $db->query("SELECT COUNT(*) FROM bot_room_config")->fetchColumn(),
-        ];
-        return $twig->render($response, 'dashboard.twig', ['stats' => $stats]);
-    })->setName('dashboard')->add($authMiddleware);
-}
+$app->get('/', function (Request $request, Response $response) use ($twig, $db) {
+    $stats = [
+        'docs' => $db->query("SELECT COUNT(*) FROM bot_docs")->fetchColumn(),
+        'embeddings' => $db->query("SELECT COUNT(*) FROM bot_embeddings")->fetchColumn(),
+        'conversations' => $db->query("SELECT COUNT(*) FROM bot_conversations")->fetchColumn(),
+        'rooms' => $db->query("SELECT COUNT(*) FROM bot_room_config")->fetchColumn(),
+    ];
+    return $twig->render($response, 'dashboard.twig', ['stats' => $stats]);
+})->setName('dashboard')->add($authMiddleware);
 
 $app->run(); 
