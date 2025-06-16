@@ -389,18 +389,39 @@ class DocumentUploader {
     }
 
     handleTableClick(e) {
+        const deleteBtn = this._findAncestorDeleteButton(e.target);
+        if (!deleteBtn) {
+            return; // Click was not on a delete button or one of its children
+        }
+
+        // Stop default behaviour once we know it's the delete action
         e.preventDefault();
         e.stopPropagation();
-        
-        const deleteBtn = e.target.closest('.delete-doc-btn');
-        if (deleteBtn) {
-            const docId = deleteBtn.dataset.docId;
-            const filename = deleteBtn.dataset.filename;
-            
-            if (docId && filename) {
-                this.showDeleteModal(docId, filename);
-            }
+
+        const docId = deleteBtn.dataset.docId;
+        const filename = deleteBtn.dataset.filename;
+
+        if (docId && filename) {
+            this.showDeleteModal(docId, filename);
         }
+    }
+
+    /**
+     * Traverse up the DOM to locate the element with the `delete-doc-btn` class.
+     * This avoids relying on `Element.closest()`, which is not implemented on
+     * older Safari versions for SVG elements.
+     * @param {HTMLElement} el
+     * @returns {HTMLElement|null}
+     * @private
+     */
+    _findAncestorDeleteButton(el) {
+        while (el && el !== this.documentsTable) {
+            if (el.classList && el.classList.contains('delete-doc-btn')) {
+                return el;
+            }
+            el = el.parentNode;
+        }
+        return null;
     }
 
     showDeleteModal(docId, filename) {
