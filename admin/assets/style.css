@@ -396,8 +396,6 @@ html {
     font-size: 2rem;
 }
 
-
-
 /* Notification System */
 .notification-container {
     position: fixed;
@@ -1270,4 +1268,27 @@ html {
 .brand-logo:hover svg rect:nth-child(7) {
     transform: scale(1.05);
     filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.5));
+}
+
+/* Modal Fallback Styles (in case Bulma stylesheet is blocked by CSP) */
+.modal.is-active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(10, 10, 10, 0.6);
+    z-index: -1; /* keep below modal-card */
+}
+
+.modal-card {
+    background: #ffffff;
+    max-width: 600px;
+    width: 90%;
 } 
