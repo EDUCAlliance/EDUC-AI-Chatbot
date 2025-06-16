@@ -1,266 +1,278 @@
 <?php
 /**
- * EDUC AI TalkBot - Admin Users Management
+ * EDUC AI TalkBot - Admin Users Management Page
  */
 
 session_start();
-
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 
-// Check authentication
 checkSetup();
 requireAuth();
 
-// Handle form submissions
-$message = '';
-$messageType = '';
-
-if ($_POST) {
-    $action = $_POST['action'] ?? '';
-    
-    switch ($action) {
-        case 'add_user':
-            $message = 'User creation functionality will be implemented';
-            $messageType = 'info';
-            break;
-            
-        case 'update_user':
-            $message = 'User update functionality will be implemented';
-            $messageType = 'info';
-            break;
-            
-        case 'delete_user':
-            $message = 'User deletion functionality will be implemented';
-            $messageType = 'info';
-            break;
-            
-        case 'change_password':
-            $message = 'Password change functionality will be implemented';
-            $messageType = 'info';
-            break;
-    }
-}
-
-// Get current user info
-$currentUser = getCurrentUser();
-
-// Mock users data for display
-$adminUsers = [
-    [
-        'id' => 1,
-        'username' => $currentUser['username'] ?? 'admin',
-        'full_name' => $currentUser['full_name'] ?? 'Administrator',
-        'email' => $currentUser['email'] ?? 'admin@example.com',
-        'role' => 'administrator',
-        'status' => 'active',
-        'last_login' => date('Y-m-d H:i:s'),
-        'created_at' => date('Y-m-d H:i:s', strtotime('-30 days'))
-    ]
-];
-
-// Page configuration
 $pageTitle = 'Admin Users';
 $pageIcon = 'bi bi-people';
 
-// Include header
+$db = \EDUC\Database\Database::getInstance();
+$message = '';
+$messageType = 'info';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+        if (!isset($_POST['csrf_token']) || !\EDUC\Utils\Security::validateCSRFToken($_POST['csrf_token'])) {
+            throw new Exception('Invalid CSRF token');
+        }
+        
+        $action = $_POST['action'] ?? '';
+        
+        switch ($action) {
+            case 'add_user':
+                $username = trim($_POST['username'] ?? '');
+                $password = $_POST['password'] ?? '';
+                $fullName = trim($_POST['full_name'] ?? '');
+                $email = trim($_POST['email'] ?? '');
+                $role = $_POST['role'] ?? 'admin';
+                
+                if (empty($username) || empty($password)) {
+                    throw new Exception('Username and password are required');
+                }
+                
+                if (strlen($password) < 8) {
+                    throw new Exception('Password must be at least 8 characters long');
+                }
+                
+                // Check if username already exists
+                $connection = $db->getConnection();
+                $stmt = $connection->prepare("SELECT id FROM {$db->getTablePrefix()}admin_users WHERE username = ?");
+                $stmt->execute([$username]);
+                if ($stmt->fetch()) {
+                    throw new Exception('Username already exists');
+                }
+                
+                // Create user
+                $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+                $stmt = $connection->prepare("
+                    INSERT INTO {$db->getTablePrefix()}admin_users (username, password_hash, full_name, email, role, created_at) 
+                    VALUES (?, ?, ?, ?, ?, NOW())
+                ");
+                $stmt->execute([$username, $hashedPassword, $fullName, $email, $role]);
+                
+                $message = "User '$username' created successfully!";
+                $messageType = 'success';
+                break;
+                
+            case 'delete_user':
+                $userId = intval($_POST['user_id']);
+                $currentUserId = getCurrentUser()['id'];
+                
+                if ($userId === $currentUserId) {
+                    throw new Exception('Cannot delete your own account');
+                }
+                
+                $connection = $db->getConnection();
+                $stmt = $connection->prepare("DELETE FROM {$db->getTablePrefix()}admin_users WHERE id = ?");
+                $stmt->execute([$userId]);
+                
+                $message = "User deleted successfully!";
+                $messageType = 'success';
+                break;
+                
+            case 'update_role':
+                $userId = intval($_POST['user_id']);
+                $role = $_POST['role'] ?? 'admin';
+                $currentUserId = getCurrentUser()['id'];
+                
+                if ($userId === $currentUserId) {
+                    throw new Exception('Cannot modify your own role');
+                }
+                
+                $connection = $db->getConnection();
+                $stmt = $connection->prepare("UPDATE {$db->getTablePrefix()}admin_users SET role = ? WHERE id = ?");
+                $stmt->execute([$role, $userId]);
+                
+                $message = "User role updated successfully!";
+                $messageType = 'success';
+                break;
+                
+            default:
+                throw new Exception('Unknown action');
+        }
+        
+    } catch (Exception $e) {
+        \EDUC\Utils\Logger::error('Users page error', ['error' => $e->getMessage()]);
+        $message = 'Error: ' . $e->getMessage();
+        $messageType = 'error';
+    }
+}
+
+// Get all admin users
+function getAllUsers() {
+    $db = \EDUC\Database\Database::getInstance();
+    $connection = $db->getConnection();
+    $stmt = $connection->query("
+        SELECT id, username, full_name, email, role, last_login, created_at 
+        FROM {$db->getTablePrefix()}admin_users 
+        ORDER BY created_at DESC
+    ");
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+$users = getAllUsers();
+$currentUser = getCurrentUser();
+$csrfToken = \EDUC\Utils\Security::generateCSRFToken();
+
 include __DIR__ . '/includes/header.php';
 ?>
 
 <?php if ($message): ?>
-    <div class="alert alert-<?= $messageType ?> alert-dismissible fade show">
-        <i class="bi bi-info-circle"></i>
+    <div class="alert alert-<?= $messageType === 'error' ? 'danger' : $messageType ?> alert-dismissible fade show">
         <?= htmlspecialchars($message) ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 <?php endif; ?>
 
-<div class="row">
-    <div class="col-lg-8">
-        <!-- Admin Users List -->
+<!-- User Statistics -->
+<div class="row mb-4">
+    <div class="col-md-3">
         <div class="stats-card">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h5 class="mb-0">
-                    <i class="bi bi-people"></i> Administrator Accounts
-                </h5>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
-                    <i class="bi bi-plus"></i> Add Admin User
-                </button>
+            <div class="stats-icon primary">
+                <i class="bi bi-people"></i>
             </div>
-            
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>User</th>
-                            <th>Role</th>
-                            <th>Status</th>
-                            <th>Last Login</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($adminUsers as $user): ?>
-                            <tr>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="user-avatar me-3">
-                                            <?= strtoupper(substr($user['username'], 0, 1)) ?>
-                                        </div>
-                                        <div>
-                                            <div class="fw-medium"><?= htmlspecialchars($user['full_name']) ?></div>
-                                            <small class="text-muted">@<?= htmlspecialchars($user['username']) ?></small>
-                                            <br>
-                                            <small class="text-muted"><?= htmlspecialchars($user['email']) ?></small>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="badge bg-primary"><?= ucfirst($user['role']) ?></span>
-                                </td>
-                                <td>
-                                    <?php
-                                    $statusClass = $user['status'] === 'active' ? 'bg-success' : 'bg-secondary';
-                                    ?>
-                                    <span class="badge <?= $statusClass ?>"><?= ucfirst($user['status']) ?></span>
-                                </td>
-                                <td>
-                                    <small class="text-muted"><?= date('M j, Y H:i', strtotime($user['last_login'])) ?></small>
-                                </td>
-                                <td>
-                                    <div class="btn-group btn-group-sm">
-                                        <button class="btn btn-outline-primary" onclick="editUser(<?= $user['id'] ?>)">
-                                            <i class="bi bi-pencil"></i>
-                                        </button>
-                                        <button class="btn btn-outline-warning" onclick="changePassword(<?= $user['id'] ?>)">
-                                            <i class="bi bi-key"></i>
-                                        </button>
-                                        <?php if ($user['id'] != ($currentUser['id'] ?? 1)): ?>
-                                            <button class="btn btn-outline-danger" onclick="deleteUser(<?= $user['id'] ?>)">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+            <h3 class="stats-value"><?= count($users) ?></h3>
+            <p class="stats-label">Total Admin Users</p>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card success">
+            <div class="stats-icon success">
+                <i class="bi bi-person-check"></i>
+            </div>
+            <h3 class="stats-value"><?= count(array_filter($users, fn($u) => $u['last_login'] !== null)) ?></h3>
+            <p class="stats-label">Active Users</p>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card warning">
+            <div class="stats-icon warning">
+                <i class="bi bi-shield-check"></i>
+            </div>
+            <h3 class="stats-value"><?= count(array_filter($users, fn($u) => $u['role'] === 'super_admin')) ?></h3>
+            <p class="stats-label">Super Admins</p>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card secondary">
+            <div class="stats-icon secondary">
+                <i class="bi bi-person-plus"></i>
+            </div>
+            <h3 class="stats-value"><?= count(array_filter($users, fn($u) => $u['role'] === 'admin')) ?></h3>
+            <p class="stats-label">Regular Admins</p>
+        </div>
+    </div>
+</div>
+
+<!-- Add User Button -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="stats-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-people"></i> Admin Users Management
+                </h5>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                    <i class="bi bi-person-plus"></i> Add New User
+                </button>
             </div>
         </div>
     </div>
-    
-    <div class="col-lg-4">
-        <!-- Current User Info -->
-        <div class="stats-card mb-4">
-            <h5 class="mb-3">
-                <i class="bi bi-person-circle"></i> Current Session
-            </h5>
-            
-            <div class="text-center mb-3">
-                <div class="user-avatar-large mx-auto mb-3">
-                    <?= strtoupper(substr($currentUser['username'] ?? 'A', 0, 1)) ?>
-                </div>
-                <h6><?= htmlspecialchars($currentUser['full_name'] ?? 'Administrator') ?></h6>
-                <p class="text-muted">@<?= htmlspecialchars($currentUser['username'] ?? 'admin') ?></p>
-            </div>
-            
-            <table class="table table-sm">
-                <tr>
-                    <td>Role:</td>
-                    <td><span class="badge bg-primary"><?= ucfirst($currentUser['role'] ?? 'Administrator') ?></span></td>
-                </tr>
-                <tr>
-                    <td>Email:</td>
-                    <td><?= htmlspecialchars($currentUser['email'] ?? 'Not set') ?></td>
-                </tr>
-                <tr>
-                    <td>Session Started:</td>
-                    <td><?= date('M j, Y H:i', $_SESSION['login_time'] ?? time()) ?></td>
-                </tr>
-                <tr>
-                    <td>IP Address:</td>
-                    <td><?= $_SERVER['REMOTE_ADDR'] ?? 'Unknown' ?></td>
-                </tr>
-            </table>
-            
-            <div class="d-grid gap-2 mt-3">
-                <button class="btn btn-outline-primary" onclick="editProfile()">
-                    <i class="bi bi-pencil"></i> Edit Profile
-                </button>
-                <button class="btn btn-outline-warning" onclick="changeMyPassword()">
-                    <i class="bi bi-key"></i> Change Password
-                </button>
-                <a href="logout.php" class="btn btn-outline-danger">
-                    <i class="bi bi-box-arrow-right"></i> Logout
-                </a>
-            </div>
-        </div>
-        
-        <!-- Security Settings -->
-        <div class="stats-card mb-4">
-            <h5 class="mb-3">
-                <i class="bi bi-shield"></i> Security Settings
-            </h5>
-            
-            <table class="table table-sm">
-                <tr>
-                    <td>Session Timeout:</td>
-                    <td><?= htmlspecialchars(getenv('ADMIN_SESSION_TIMEOUT') ?: '3600') ?>s</td>
-                </tr>
-                <tr>
-                    <td>Max Login Attempts:</td>
-                    <td><?= htmlspecialchars(getenv('MAX_LOGIN_ATTEMPTS') ?: '5') ?></td>
-                </tr>
-                <tr>
-                    <td>Lockout Time:</td>
-                    <td><?= htmlspecialchars(getenv('LOGIN_LOCKOUT_TIME') ?: '900') ?>s</td>
-                </tr>
-                <tr>
-                    <td>2FA Enabled:</td>
-                    <td><span class="badge bg-warning">Not available</span></td>
-                </tr>
-            </table>
-            
-            <div class="mt-3">
-                <a href="settings.php" class="btn btn-outline-primary btn-sm w-100">
-                    <i class="bi bi-gear"></i> Configure Security
-                </a>
-            </div>
-        </div>
-        
-        <!-- User Statistics -->
+</div>
+
+<!-- Users Table -->
+<div class="row">
+    <div class="col-12">
         <div class="stats-card">
-            <h5 class="mb-3">
-                <i class="bi bi-graph-up"></i> User Statistics
-            </h5>
-            
-            <div class="row text-center">
-                <div class="col-6 mb-3">
-                    <div class="border rounded p-3">
-                        <h4 class="text-primary mb-1"><?= count($adminUsers) ?></h4>
-                        <small class="text-muted">Total Admins</small>
-                    </div>
+            <?php if (empty($users)): ?>
+                <div class="text-center py-4">
+                    <i class="bi bi-people" style="font-size: 3rem; color: #e5e7eb;"></i>
+                    <p class="text-muted mt-2">No admin users found</p>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                        <i class="bi bi-person-plus"></i> Add First User
+                    </button>
                 </div>
-                <div class="col-6 mb-3">
-                    <div class="border rounded p-3">
-                        <h4 class="text-success mb-1">1</h4>
-                        <small class="text-muted">Active Sessions</small>
-                    </div>
+            <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Role</th>
+                                <th>Last Login</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($users as $user): ?>
+                                <tr class="<?= $user['id'] == $currentUser['id'] ? 'table-primary' : '' ?>">
+                                    <td>
+                                        <div>
+                                            <strong><?= htmlspecialchars($user['username']) ?></strong>
+                                            <?php if ($user['id'] == $currentUser['id']): ?>
+                                                <span class="badge bg-info ms-2">You</span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php if ($user['full_name']): ?>
+                                            <small class="text-muted"><?= htmlspecialchars($user['full_name']) ?></small>
+                                        <?php endif; ?>
+                                        <?php if ($user['email']): ?>
+                                            <div><small class="text-muted"><?= htmlspecialchars($user['email']) ?></small></div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-<?= $user['role'] === 'super_admin' ? 'danger' : 'primary' ?>">
+                                            <?= ucfirst(str_replace('_', ' ', $user['role'])) ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <?php if ($user['last_login']): ?>
+                                            <small><?= date('M j, Y \a\t g:i A', strtotime($user['last_login'])) ?></small>
+                                        <?php else: ?>
+                                            <span class="text-muted">Never</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <small><?= date('M j, Y', strtotime($user['created_at'])) ?></small>
+                                    </td>
+                                    <td>
+                                        <?php if ($user['id'] != $currentUser['id']): ?>
+                                            <div class="btn-group btn-group-sm">
+                                                <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                                    Actions
+                                                </button>
+                                                <ul class="dropdown-menu">
+                                                    <li>
+                                                        <button class="dropdown-item" type="button" onclick="changeRole(<?= $user['id'] ?>, '<?= $user['role'] ?>')">
+                                                            <i class="bi bi-shield"></i> Change Role
+                                                        </button>
+                                                    </li>
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li>
+                                                        <button class="dropdown-item text-danger" type="button" onclick="deleteUser(<?= $user['id'] ?>, '<?= htmlspecialchars($user['username']) ?>')">
+                                                            <i class="bi bi-trash"></i> Delete User
+                                                        </button>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        <?php else: ?>
+                                            <small class="text-muted">Current User</small>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
                 </div>
-                <div class="col-6 mb-3">
-                    <div class="border rounded p-3">
-                        <h4 class="text-info mb-1">0</h4>
-                        <small class="text-muted">Failed Logins (24h)</small>
-                    </div>
-                </div>
-                <div class="col-6 mb-3">
-                    <div class="border rounded p-3">
-                        <h4 class="text-warning mb-1">30</h4>
-                        <small class="text-muted">Days Active</small>
-                    </div>
-                </div>
-            </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -270,135 +282,86 @@ include __DIR__ . '/includes/header.php';
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add Administrator</h5>
+                <h5 class="modal-title">Add New Admin User</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST">
-                <input type="hidden" name="action" value="add_user">
+            <form method="post" action="">
                 <div class="modal-body">
+                    <input type="hidden" name="action" value="add_user">
+                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                    
                     <div class="mb-3">
-                        <label for="username" class="form-label">Username</label>
+                        <label for="username" class="form-label">Username *</label>
                         <input type="text" class="form-control" id="username" name="username" required>
                     </div>
                     
                     <div class="mb-3">
+                        <label for="password" class="form-label">Password *</label>
+                        <input type="password" class="form-control" id="password" name="password" required minlength="8">
+                        <small class="form-text text-muted">Minimum 8 characters</small>
+                    </div>
+                    
+                    <div class="mb-3">
                         <label for="full_name" class="form-label">Full Name</label>
-                        <input type="text" class="form-control" id="full_name" name="full_name" required>
+                        <input type="text" class="form-control" id="full_name" name="full_name">
                     </div>
                     
                     <div class="mb-3">
                         <label for="email" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="email" name="email" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Password</label>
-                        <input type="password" class="form-control" id="password" name="password" required>
+                        <input type="email" class="form-control" id="email" name="email">
                     </div>
                     
                     <div class="mb-3">
                         <label for="role" class="form-label">Role</label>
-                        <select class="form-select" id="role" name="role" required>
-                            <option value="administrator">Administrator</option>
-                            <option value="moderator">Moderator</option>
+                        <select class="form-select" id="role" name="role">
+                            <option value="admin">Admin</option>
+                            <option value="super_admin">Super Admin</option>
                         </select>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Create User</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-person-plus"></i> Add User
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Edit User Modal -->
-<div class="modal fade" id="editUserModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Edit User</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p>User editing functionality will be implemented here.</p>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- Hidden Forms for Actions -->
+<form id="deleteForm" method="post" action="" style="display: none;">
+    <input type="hidden" name="action" value="delete_user">
+    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+    <input type="hidden" name="user_id" id="deleteUserId">
+</form>
 
-<!-- Change Password Modal -->
-<div class="modal fade" id="changePasswordModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Change Password</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p>Password change functionality will be implemented here.</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<style>
-.user-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: 600;
-    font-size: 0.875rem;
-}
-
-.user-avatar-large {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: 700;
-    font-size: 2rem;
-}
-</style>
+<form id="roleForm" method="post" action="" style="display: none;">
+    <input type="hidden" name="action" value="update_role">
+    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+    <input type="hidden" name="user_id" id="roleUserId">
+    <input type="hidden" name="role" id="newRole">
+</form>
 
 <script>
-function editUser(userId) {
-    const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
-    modal.show();
-}
-
-function changePassword(userId) {
-    const modal = new bootstrap.Modal(document.getElementById('changePasswordModal'));
-    modal.show();
-}
-
-function deleteUser(userId) {
-    if (confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-        // Implementation would go here
-        alert('User deletion functionality will be implemented');
+function deleteUser(userId, username) {
+    if (confirm(`Are you sure you want to delete user "${username}"? This action cannot be undone.`)) {
+        document.getElementById('deleteUserId').value = userId;
+        document.getElementById('deleteForm').submit();
     }
 }
 
-function editProfile() {
-    alert('Profile editing functionality will be implemented');
-}
-
-function changeMyPassword() {
-    const modal = new bootstrap.Modal(document.getElementById('changePasswordModal'));
-    modal.show();
+function changeRole(userId, currentRole) {
+    const newRole = currentRole === 'admin' ? 'super_admin' : 'admin';
+    const roleName = newRole === 'super_admin' ? 'Super Admin' : 'Admin';
+    
+    if (confirm(`Change user role to ${roleName}?`)) {
+        document.getElementById('roleUserId').value = userId;
+        document.getElementById('newRole').value = newRole;
+        document.getElementById('roleForm').submit();
+    }
 }
 </script>
 
-<?php
-include __DIR__ . '/includes/footer.php';
-?> 
+<?php include __DIR__ . '/includes/footer.php'; ?> 

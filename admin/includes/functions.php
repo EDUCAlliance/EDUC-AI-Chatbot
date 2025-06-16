@@ -9,50 +9,36 @@ require_once __DIR__ . '/auth.php';
  * Get system statistics
  */
 function getSystemStats(): array {
-    $stats = [
-        'total_messages' => 0,
-        'total_chats' => 0,
-        'messages_24h' => 0,
-        'admin_users' => 1
-    ];
+    $db = \EDUC\Database\Database::getInstance();
+    $prefix = $db->getTablePrefix();
+    
+    $stats = [];
     
     try {
-        $db = \EDUC\Database\Database::getInstance();
-        $prefix = $db->getTablePrefix();
+        // Message count
+        $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}messages");
+        $stats['total_messages'] = $result[0]['count'] ?? 0;
         
-        // Check if tables exist before querying them
-        $connection = $db->getConnection();
+        // Chat count
+        $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}chat_configs");
+        $stats['total_chats'] = $result[0]['count'] ?? 0;
         
-        // Check if messages table exists
-        $tableExists = $connection->prepare("SELECT to_regclass(?)");
-        $tableExists->execute(["{$prefix}messages"]);
-        if ($tableExists->fetchColumn()) {
-            $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}messages");
-            $stats['total_messages'] = $result[0]['count'] ?? 0;
-            
-            // Recent activity (last 24 hours)
-            $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}messages WHERE created_at > NOW() - INTERVAL '24 hours'");
-            $stats['messages_24h'] = $result[0]['count'] ?? 0;
-        }
+        // Recent activity (last 24 hours)
+        $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}messages WHERE created_at > NOW() - INTERVAL '24 hours'");
+        $stats['messages_24h'] = $result[0]['count'] ?? 0;
         
-        // Check if chat_configs table exists
-        $tableExists = $connection->prepare("SELECT to_regclass(?)");
-        $tableExists->execute(["{$prefix}chat_configs"]);
-        if ($tableExists->fetchColumn()) {
-            $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}chat_configs");
-            $stats['total_chats'] = $result[0]['count'] ?? 0;
-        }
-        
-        // Check if admin_users table exists
-        $tableExists = $connection->prepare("SELECT to_regclass(?)");
-        $tableExists->execute(["{$prefix}admin_users"]);
-        if ($tableExists->fetchColumn()) {
-            $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}admin_users WHERE is_active = TRUE");
-            $stats['admin_users'] = $result[0]['count'] ?? 1;
-        }
+        // Admin users count
+        $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}admin_users WHERE is_active = TRUE");
+        $stats['admin_users'] = $result[0]['count'] ?? 0;
         
     } catch (Exception $e) {
-        error_log('Failed to get system stats: ' . $e->getMessage());
+        \EDUC\Utils\Logger::error('Failed to get system stats', ['error' => $e->getMessage()]);
+        $stats = [
+            'total_messages' => 0,
+            'total_chats' => 0,
+            'messages_24h' => 0,
+            'admin_users' => 0
+        ];
     }
     
     return $stats;
@@ -62,51 +48,41 @@ function getSystemStats(): array {
  * Get RAG statistics
  */
 function getRAGStats(): array {
-    $stats = [
-        'total_documents' => 0,
-        'total_embeddings' => 0,
-        'processed_documents' => 0,
-        'pending_documents' => 0,
-        'document_types' => []
-    ];
+    $db = \EDUC\Database\Database::getInstance();
+    $prefix = $db->getTablePrefix();
+    
+    $stats = [];
     
     try {
-        $db = \EDUC\Database\Database::getInstance();
-        $prefix = $db->getTablePrefix();
-        $connection = $db->getConnection();
+        // Document count
+        $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}documents");
+        $stats['total_documents'] = $result[0]['count'] ?? 0;
         
-        // Check if documents table exists
-        $tableExists = $connection->prepare("SELECT to_regclass(?)");
-        $tableExists->execute(["{$prefix}documents"]);
-        if ($tableExists->fetchColumn()) {
-            // Document count
-            $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}documents");
-            $stats['total_documents'] = $result[0]['count'] ?? 0;
-            
-            // Processed documents
-            $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}documents WHERE status = 'processed'");
-            $stats['processed_documents'] = $result[0]['count'] ?? 0;
-            
-            // Pending documents
-            $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}documents WHERE status IN ('uploaded', 'pending')");
-            $stats['pending_documents'] = $result[0]['count'] ?? 0;
-            
-            // Document types
-            $result = $db->query("SELECT mime_type, COUNT(*) as count FROM {$prefix}documents GROUP BY mime_type ORDER BY count DESC LIMIT 5");
-            $stats['document_types'] = $result;
-        }
+        // Embedding count
+        $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}embeddings");
+        $stats['total_embeddings'] = $result[0]['count'] ?? 0;
         
-        // Check if embeddings table exists
-        $tableExists = $connection->prepare("SELECT to_regclass(?)");
-        $tableExists->execute(["{$prefix}embeddings"]);
-        if ($tableExists->fetchColumn()) {
-            // Embedding count
-            $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}embeddings");
-            $stats['total_embeddings'] = $result[0]['count'] ?? 0;
-        }
+        // Processed documents
+        $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}documents WHERE status = 'processed'");
+        $stats['processed_documents'] = $result[0]['count'] ?? 0;
+        
+        // Pending documents
+        $result = $db->query("SELECT COUNT(*) as count FROM {$prefix}documents WHERE status IN ('uploaded', 'pending')");
+        $stats['pending_documents'] = $result[0]['count'] ?? 0;
+        
+        // Document types
+        $result = $db->query("SELECT mime_type, COUNT(*) as count FROM {$prefix}documents GROUP BY mime_type ORDER BY count DESC LIMIT 5");
+        $stats['document_types'] = $result;
         
     } catch (Exception $e) {
-        error_log('Failed to get RAG stats: ' . $e->getMessage());
+        \EDUC\Utils\Logger::error('Failed to get RAG stats', ['error' => $e->getMessage()]);
+        $stats = [
+            'total_documents' => 0,
+            'total_embeddings' => 0,
+            'processed_documents' => 0,
+            'pending_documents' => 0,
+            'document_types' => []
+        ];
     }
     
     return $stats;
@@ -116,14 +92,14 @@ function getRAGStats(): array {
  * Get system information
  */
 function getSystemInfo(): array {
-    $info = [
+    return [
         'php_version' => PHP_VERSION,
         'php_memory_limit' => ini_get('memory_limit'),
         'php_max_execution_time' => ini_get('max_execution_time'),
-        'cloudron_mode' => !empty(getenv('CLOUDRON_ENVIRONMENT')),
-        'app_path' => __DIR__,
+        'cloudron_mode' => \EDUC\Core\Environment::isCloudron(),
+        'app_path' => \EDUC\Core\Environment::getAppPath(),
         'database_type' => 'PostgreSQL',
-        'log_level' => 'INFO',
+        'log_level' => \EDUC\Utils\Logger::getLogLevel(),
         'extensions' => [
             'pdo' => extension_loaded('pdo'),
             'pdo_pgsql' => extension_loaded('pdo_pgsql'),
@@ -135,64 +111,36 @@ function getSystemInfo(): array {
             'openssl' => extension_loaded('openssl'),
         ],
         'pdo_drivers' => class_exists('PDO') ? PDO::getAvailableDrivers() : [],
-        'disk_usage' => ['usage_percentage' => 0, 'used' => '0 MB', 'total' => '0 MB'],
-        'uptime' => 'Unknown'
+        'disk_usage' => getDiskUsage(),
+        'uptime' => getSystemUptime()
     ];
-    
-    try {
-        // Try to get more accurate information if classes are available
-        if (class_exists('\EDUC\Core\Environment')) {
-            $info['cloudron_mode'] = \EDUC\Core\Environment::isCloudron();
-            $info['app_path'] = \EDUC\Core\Environment::getAppPath();
-        }
-        
-        if (class_exists('\EDUC\Utils\Logger')) {
-            $info['log_level'] = \EDUC\Utils\Logger::getLogLevel();
-        }
-        
-        $info['disk_usage'] = getDiskUsage();
-        $info['uptime'] = getSystemUptime();
-        
-    } catch (Exception $e) {
-        error_log('Failed to get complete system info: ' . $e->getMessage());
-    }
-    
-    return $info;
 }
 
 /**
  * Get disk usage information
  */
 function getDiskUsage(): array {
+    $appPath = \EDUC\Core\Environment::getAppPath();
+    
     try {
-        $appPath = __DIR__;
-        if (class_exists('\EDUC\Core\Environment')) {
-            $appPath = \EDUC\Core\Environment::getAppPath();
-        }
-        
         $totalBytes = disk_total_space($appPath);
         $freeBytes = disk_free_space($appPath);
+        $usedBytes = $totalBytes - $freeBytes;
         
-        if ($totalBytes && $freeBytes) {
-            $usedBytes = $totalBytes - $freeBytes;
-            
-            return [
-                'total' => formatBytes($totalBytes),
-                'used' => formatBytes($usedBytes),
-                'free' => formatBytes($freeBytes),
-                'usage_percentage' => round(($usedBytes / $totalBytes) * 100, 1)
-            ];
-        }
+        return [
+            'total' => formatBytes($totalBytes),
+            'used' => formatBytes($usedBytes),
+            'free' => formatBytes($freeBytes),
+            'usage_percentage' => round(($usedBytes / $totalBytes) * 100, 1)
+        ];
     } catch (Exception $e) {
-        error_log('Failed to get disk usage: ' . $e->getMessage());
+        return [
+            'total' => 'Unknown',
+            'used' => 'Unknown',
+            'free' => 'Unknown',
+            'usage_percentage' => 0
+        ];
     }
-    
-    return [
-        'total' => 'Unknown',
-        'used' => 'Unknown',
-        'free' => 'Unknown',
-        'usage_percentage' => 0
-    ];
 }
 
 /**
@@ -265,8 +213,8 @@ function testDatabaseConnection(): array {
  */
 function testAPIConnection(): array {
     try {
-        $apiKey = getenv('AI_API_KEY');
-        $apiEndpoint = getenv('AI_API_ENDPOINT');
+        $apiKey = \EDUC\Core\Environment::get('AI_API_KEY');
+        $apiEndpoint = \EDUC\Core\Environment::get('AI_API_ENDPOINT');
         
         if (!$apiKey || !$apiEndpoint) {
             return [
@@ -275,34 +223,15 @@ function testAPIConnection(): array {
             ];
         }
         
-        // Simple cURL test instead of using the LLMClient class
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL => str_replace('/chat/completions', '/models', $apiEndpoint),
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
-                'Authorization: Bearer ' . $apiKey,
-                'Accept: application/json'
-            ],
-            CURLOPT_TIMEOUT => 10,
-            CURLOPT_SSL_VERIFYPEER => false
-        ]);
+        $llmClient = new \EDUC\API\LLMClient(
+            $apiKey,
+            $apiEndpoint,
+            \EDUC\Core\Environment::get('EMBEDDING_API_ENDPOINT'),
+            \EDUC\Core\Environment::get('MODELS_API_ENDPOINT')
+        );
         
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        
-        if ($httpCode === 200) {
-            return [
-                'status' => 'success',
-                'message' => 'API connection successful'
-            ];
-        } else {
-            return [
-                'status' => 'error',
-                'error' => 'API returned HTTP ' . $httpCode
-            ];
-        }
+        $result = $llmClient->testConnection();
+        return $result;
         
     } catch (Exception $e) {
         return [
@@ -404,171 +333,4 @@ function renderAlert(string $message, string $type = 'info', bool $dismissible =
         htmlspecialchars($message),
         $dismissButton
     );
-}
-
-/**
- * Get available AI models from GWDG SAIA API
- */
-function getAvailableModels(): array {
-    try {
-        $apiKey = getenv('AI_API_KEY');
-        $modelsEndpoint = getenv('MODELS_API_ENDPOINT') ?: 'https://chat-ai.academiccloud.de/v1/models';
-        
-        if (!$apiKey) {
-            throw new Exception('AI_API_KEY not configured');
-        }
-        
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL => $modelsEndpoint,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
-                'Authorization: Bearer ' . $apiKey,
-                'Accept: application/json',
-                'Content-Type: application/json'
-            ],
-            CURLOPT_TIMEOUT => 10,
-            CURLOPT_SSL_VERIFYPEER => false
-        ]);
-        
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        
-        if (curl_errno($ch)) {
-            throw new Exception('cURL error: ' . curl_error($ch));
-        }
-        
-        curl_close($ch);
-        
-        if ($httpCode !== 200) {
-            throw new Exception('API returned HTTP ' . $httpCode);
-        }
-        
-        $data = json_decode($response, true);
-        if (!$data || !isset($data['data'])) {
-            throw new Exception('Invalid API response format');
-        }
-        
-        return $data['data'];
-        
-    } catch (Exception $e) {
-        error_log('Failed to fetch models: ' . $e->getMessage());
-        return [];
-    }
-}
-
-/**
- * Get current setting value
- */
-function getCurrentSetting(string $key): ?string {
-    try {
-        $db = \EDUC\Database\Database::getInstance();
-        $settings = $db->getAllSettings();
-        return $settings[$key]['value'] ?? null;
-    } catch (Exception $e) {
-        return null;
-    }
-}
-
-/**
- * Format file size for display
- */
-function formatFileSize(int $bytes): string {
-    return formatBytes($bytes);
-}
-
-/**
- * Check pgvector extension availability
- */
-function checkPgvectorExtension(): bool {
-    try {
-        $db = \EDUC\Database\Database::getInstance();
-        $connection = $db->getConnection();
-        $connection->exec("CREATE EXTENSION IF NOT EXISTS vector");
-        return true;
-    } catch (Exception $e) {
-        return false;
-    }
-}
-
-/**
- * Handle file upload for RAG documents
- */
-function handleFileUpload(array $files): array {
-    if (!isset($files['documents']) || empty($files['documents']['name'][0])) {
-        return ['message' => 'No files selected', 'type' => 'danger'];
-    }
-    
-    // This is a placeholder implementation
-    return [
-        'message' => 'File upload functionality needs to be fully implemented',
-        'type' => 'info'
-    ];
-}
-
-/**
- * Process documents for RAG
- */
-function processDocuments(): array {
-    // This is a placeholder implementation
-    return [
-        'message' => 'Document processing functionality needs to be implemented',
-        'type' => 'info'
-    ];
-}
-
-/**
- * Clear RAG data
- */
-function clearRAGData(): array {
-    try {
-        $db = \EDUC\Database\Database::getInstance();
-        $prefix = $db->getTablePrefix();
-        
-        // Clear embeddings and documents (when tables exist)
-        // $db->execute("DELETE FROM {$prefix}embeddings");
-        // $db->execute("DELETE FROM {$prefix}documents");
-        
-        return [
-            'message' => 'RAG data clearing functionality needs to be implemented',
-            'type' => 'info'
-        ];
-    } catch (Exception $e) {
-        return [
-            'message' => 'Failed to clear RAG data: ' . $e->getMessage(),
-            'type' => 'danger'
-        ];
-    }
-}
-
-/**
- * Get uploaded documents list
- */
-function getUploadedDocuments(): array {
-    try {
-        $db = \EDUC\Database\Database::getInstance();
-        $prefix = $db->getTablePrefix();
-        
-        // When documents table exists:
-        // $result = $db->query("SELECT * FROM {$prefix}documents ORDER BY created_at DESC");
-        // return $result;
-        
-        return []; // Empty for now
-    } catch (Exception $e) {
-        return [];
-    }
-}
-
-/**
- * Get current user information
- */
-function getCurrentUser(): array {
-    return [
-        'id' => 1,
-        'username' => 'admin',
-        'full_name' => 'Administrator',
-        'email' => 'admin@example.com',
-        'role' => 'administrator'
-    ];
-}
-?> 
+} 
