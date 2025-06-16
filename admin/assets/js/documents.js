@@ -562,7 +562,10 @@ class DocumentUploader {
     }
 
     getBaseUrl() {
-        return window.location.pathname.replace(/\/+$/, '');
+        // Use the current path but strip the trailing "/documents" segment so we get the admin base path.
+        // Example: "/apps/educ-ai-chatbot/admin/documents" => "/apps/educ-ai-chatbot/admin"
+        const path = window.location.pathname.replace(/\/+$/, ''); // remove trailing slashes
+        return path.replace(/\/documents$/, '');
     }
 
     getUploadUrl() {
