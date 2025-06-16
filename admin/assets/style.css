@@ -150,8 +150,30 @@ html {
     box-shadow: none;
 }
 
+@media screen and (min-width: 769px) {
+    .navbar-menu {
+        display: flex !important;
+    }
+}
+
 .navbar-end {
     padding-right: var(--spacing-lg);
+    display: flex;
+    align-items: center;
+}
+
+/* Logout button in navbar */
+.navbar-end .navbar-item .button {
+    border: 1px solid var(--border-color);
+    background: white;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.navbar-end .navbar-item .button:hover {
+    background: var(--primary-light);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
 }
 
 .navbar-link {
@@ -1104,6 +1126,8 @@ html {
     
     .navbar-end {
         padding-right: var(--spacing-md);
+        justify-content: center;
+        padding-top: var(--spacing-md);
     }
     
     .navbar-dropdown {

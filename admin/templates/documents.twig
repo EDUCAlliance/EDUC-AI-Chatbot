@@ -297,6 +297,41 @@
         .notification {
             animation: slideDown 0.3s ease-out;
         }
+        
+        /* Ensure modal is hidden by default */
+        .modal {
+            display: none;
+        }
+        
+        .modal.is-active {
+            display: flex;
+        }
+        
+        /* Prevent body scroll when modal is open */
+        body.modal-open {
+            overflow: hidden;
+        }
+        
+        /* Make modal background clickable for closing */
+        .modal-background {
+            cursor: pointer;
+        }
+        
+        /* Improve delete button interaction */
+        .delete-doc-btn {
+            transition: all 0.2s ease;
+        }
+        
+        .delete-doc-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        
+        .delete-doc-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
     </style>
 
     <script src="assets/js/documents.js"></script>

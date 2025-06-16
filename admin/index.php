@@ -483,6 +483,15 @@ $app->post('/documents/delete', function (Request $request, Response $response) 
         // Handle JSON request (from JavaScript)
         $body = $request->getBody()->getContents();
         $data = json_decode($body, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'error' => 'Invalid JSON data: ' . json_last_error_msg()
+            ]));
+            return $response->withHeader('Content-Type', 'application/json')->withStatus(400);
+        }
+        
         $docId = $data['doc_id'] ?? null;
         
         try {

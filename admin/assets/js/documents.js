@@ -5,6 +5,7 @@ class DocumentUploader {
         this.currentXHR = null;
         this.currentEventSource = null;
         this.processingDocId = null;
+        this.initializeModalState();
     }
 
     initializeElements() {
@@ -40,10 +41,19 @@ class DocumentUploader {
         this.deleteModal = document.getElementById('deleteModal');
         this.deleteFileName = document.getElementById('deleteFileName');
         this.confirmDelete = document.getElementById('confirmDelete');
+        this.closeDeleteModal = document.getElementById('closeDeleteModal');
+        this.cancelDelete = document.getElementById('cancelDelete');
         
         // Drag & Drop
         this.dragDropZone = document.getElementById('dragDropZone');
         this.fileSelector = document.getElementById('fileSelector');
+    }
+
+    initializeModalState() {
+        // Ensure modal is hidden on page load
+        if (this.deleteModal) {
+            this.deleteModal.classList.remove('is-active');
+        }
     }
 
     attachEventListeners() {
@@ -56,14 +66,45 @@ class DocumentUploader {
         this.clearBtn.addEventListener('click', () => this.clearSelection());
         
         // Message dismissal
-        document.getElementById('dismissSuccess')?.addEventListener('click', () => this.hideSuccess());
-        document.getElementById('dismissError')?.addEventListener('click', () => this.hideError());
+        const dismissSuccess = document.getElementById('dismissSuccess');
+        const dismissError = document.getElementById('dismissError');
+        
+        if (dismissSuccess) {
+            dismissSuccess.addEventListener('click', () => this.hideSuccess());
+        }
+        if (dismissError) {
+            dismissError.addEventListener('click', () => this.hideError());
+        }
         
         // Delete functionality
         this.documentsTable.addEventListener('click', (e) => this.handleTableClick(e));
-        document.getElementById('closeDeleteModal')?.addEventListener('click', () => this.hideDeleteModal());
-        document.getElementById('cancelDelete')?.addEventListener('click', () => this.hideDeleteModal());
-        this.confirmDelete?.addEventListener('click', () => this.executeDelete());
+        
+        // Modal close events
+        if (this.closeDeleteModal) {
+            this.closeDeleteModal.addEventListener('click', () => this.hideDeleteModal());
+        }
+        if (this.cancelDelete) {
+            this.cancelDelete.addEventListener('click', () => this.hideDeleteModal());
+        }
+        if (this.confirmDelete) {
+            this.confirmDelete.addEventListener('click', () => this.executeDelete());
+        }
+        
+        // Close modal when clicking outside
+        if (this.deleteModal) {
+            this.deleteModal.addEventListener('click', (e) => {
+                if (e.target === this.deleteModal || e.target.classList.contains('modal-background')) {
+                    this.hideDeleteModal();
+                }
+            });
+        }
+        
+        // Escape key to close modal
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.deleteModal && this.deleteModal.classList.contains('is-active')) {
+                this.hideDeleteModal();
+            }
+        });
         
         // Drag & Drop
         this.setupDragAndDrop();
@@ -348,44 +389,94 @@ class DocumentUploader {
     }
 
     handleTableClick(e) {
-        if (e.target.closest('.delete-doc-btn')) {
-            const btn = e.target.closest('.delete-doc-btn');
-            const docId = btn.dataset.docId;
-            const filename = btn.dataset.filename;
-            this.showDeleteModal(docId, filename);
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const deleteBtn = e.target.closest('.delete-doc-btn');
+        if (deleteBtn) {
+            const docId = deleteBtn.dataset.docId;
+            const filename = deleteBtn.dataset.filename;
+            
+            if (docId && filename) {
+                this.showDeleteModal(docId, filename);
+            }
         }
     }
 
     showDeleteModal(docId, filename) {
+        if (!this.deleteModal || !this.deleteFileName || !this.confirmDelete) {
+            console.error('Modal elements not found');
+            return;
+        }
+        
         this.deleteFileName.textContent = filename;
         this.confirmDelete.dataset.docId = docId;
         this.deleteModal.classList.add('is-active');
+        
+        // Add body class to prevent scrolling
+        document.body.classList.add('modal-open');
     }
 
     hideDeleteModal() {
-        this.deleteModal.classList.remove('is-active');
+        if (this.deleteModal) {
+            this.deleteModal.classList.remove('is-active');
+            document.body.classList.remove('modal-open');
+        }
+        
+        // Clear the stored document ID
+        if (this.confirmDelete) {
+            delete this.confirmDelete.dataset.docId;
+        }
     }
 
     async executeDelete() {
+        if (!this.confirmDelete || !this.confirmDelete.dataset.docId) {
+            this.showError('No document selected for deletion');
+            return;
+        }
+        
         const docId = this.confirmDelete.dataset.docId;
+        
+        // Disable the delete button to prevent double-clicks
+        const originalText = this.confirmDelete.textContent;
+        this.confirmDelete.disabled = true;
+        this.confirmDelete.textContent = 'Deleting...';
         
         try {
             const response = await fetch(`${this.getBaseUrl()}/documents/delete`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ doc_id: docId })
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ doc_id: parseInt(docId) })
             });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
             
             const data = await response.json();
             
             if (data.success) {
                 this.removeDocumentFromTable(docId);
                 this.hideDeleteModal();
+                this.showSuccess({ message: 'Document deleted successfully' });
+                
+                // Auto-hide success message after 3 seconds
+                setTimeout(() => this.hideSuccess(), 3000);
             } else {
-                this.showError(data.error || 'Failed to delete document');
+                throw new Error(data.error || 'Failed to delete document');
             }
         } catch (error) {
-            this.showError('Network error while deleting document');
+            console.error('Delete error:', error);
+            this.showError(`Error deleting document: ${error.message}`);
+        } finally {
+            // Re-enable the delete button
+            if (this.confirmDelete) {
+                this.confirmDelete.disabled = false;
+                this.confirmDelete.textContent = originalText;
+            }
         }
     }
 
@@ -427,7 +518,7 @@ class DocumentUploader {
                             <polyline points="14,2 14,8 20,8"/>
                         </svg>
                     </span>
-                    <span>${document.filename}</span>
+                    <span>${this.escapeHtml(document.filename)}</span>
                 </span>
             </td>
             <td>
@@ -442,7 +533,7 @@ class DocumentUploader {
             </td>
             <td>${new Date(document.created_at).toLocaleString()}</td>
             <td>
-                <button type="button" class="button is-danger is-small delete-doc-btn" data-doc-id="${document.id}" data-filename="${document.filename}">
+                <button type="button" class="button is-danger is-small delete-doc-btn" data-doc-id="${document.id}" data-filename="${this.escapeHtml(document.filename)}">
                     <span class="icon">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="3,6 5,6 21,6"/>
@@ -454,6 +545,12 @@ class DocumentUploader {
             </td>
         `;
         return row;
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     formatBytes(bytes) {
