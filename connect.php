@@ -358,12 +358,21 @@ if ($roomConfig['onboarding_done'] == false) {
     // Determine current onboarding stage (may have been updated in a previous run)
     $currentStage = $roomConfig['meta']['stage'] ?? 0;
 
-    // If this is the very first touch (stage 0, no answers yet), we have not asked ANY question.
-    // Ask the first question *without* processing the current message as an answer.
-    if ($currentStage === 0 && empty($roomConfig['meta']['answers'])) {
+    // --- FIRST QUESTION HANDLING ---
+    // When stage is 0 and we have not yet asked the very first question, do so now and mark it asked.
+    $firstAsked = $roomConfig['meta']['first_question_asked'] ?? false;
+    if ($currentStage === 0 && $firstAsked === false) {
         $settingsStmt = $db->query("SELECT * FROM bot_settings WHERE id = 1");
         $globalSettings = $settingsStmt->fetch() ?: [];
         $nextStep = $onboardingManager->getNextQuestion($roomConfig, $globalSettings);
+
+        // Mark that we already asked the first question so we don't repeat it.
+        $roomConfig['meta']['first_question_asked'] = true;
+        $stmtUpdateFirst = $db->prepare("UPDATE bot_room_config SET meta = :meta WHERE room_token = :room_token");
+        $stmtUpdateFirst->execute([
+            ':meta' => json_encode($roomConfig['meta']),
+            ':room_token' => $roomConfig['room_token']
+        ]);
 
         $logger->info('Sending first onboarding question', ['question' => $nextStep['question']]);
         $success = sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
@@ -372,6 +381,7 @@ if ($roomConfig['onboarding_done'] == false) {
         }
         exit;
     }
+    // --- END FIRST QUESTION HANDLING ---
 
     // For all subsequent steps we first *process* the previous answer
     $onboardingManager->processAnswer($roomConfig, $message);
