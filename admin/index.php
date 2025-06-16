@@ -13,16 +13,19 @@ use Slim\Factory\AppFactory;
 use Slim\Views\Twig;
 use Slim\Views\TwigMiddleware;
 use NextcloudBot\Helpers\Session;
-use NextcloudBot\Helpers\Csrf;
 
 require __DIR__ . '/../src/bootstrap.php';
 
 // --- App Initialization ---
 $app = AppFactory::create();
-$app->setBasePath('/admin');
+
+// Dynamically set the base path to handle running in a subdirectory
+$basePath = '/apps/' . (getenv('APP_DIRECTORY') ?: 'educ-ai-chatbot') . '/admin';
+$app->setBasePath($basePath);
 
 // --- Twig Templates ---
 $twig = Twig::create(__DIR__ . '/templates', ['cache' => false]);
+// The `url_for` function in Twig needs the RouteParser, which TwigMiddleware adds to the container
 $app->add(TwigMiddleware::create($app, $twig));
 
 // --- Database & Logger ---
@@ -51,11 +54,12 @@ try {
 }
 
 // --- Middleware for Auth ---
-$authMiddleware = function (Request $request, $handler) {
+$authMiddleware = function (Request $request, $handler) use ($app) {
     Session::start();
     if (!Session::has('admin_logged_in')) {
         $response = new \Slim\Psr7\Response();
-        return $response->withHeader('Location', '/admin/login')->withStatus(302);
+        $loginUrl = $app->getRouteCollector()->getRouteParser()->urlFor('login');
+        return $response->withHeader('Location', $loginUrl)->withStatus(302);
     }
     return $handler->handle($request);
 };
@@ -66,7 +70,7 @@ $adminExists = $stmt->fetchColumn();
 
 if (!$adminExists) {
     // --- First Run Setup Route ---
-    $app->map(['GET', 'POST'], '/setup', function (Request $request, Response $response) use ($db, $twig) {
+    $app->map(['GET', 'POST'], '/setup', function (Request $request, Response $response) use ($db, $twig, $app) {
         if ($request->getMethod() === 'POST') {
             $password = $request->getParsedBody()['password'] ?? '';
             $passwordConfirm = $request->getParsedBody()['password_confirm'] ?? '';
@@ -76,23 +80,24 @@ if (!$adminExists) {
                 $stmt = $db->prepare("INSERT INTO bot_admin (password_hash) VALUES (?)");
                 $stmt->execute([$hash]);
                 
-                // Seed default settings
                 $db->exec("INSERT INTO bot_settings (id, mention_name, onboarding_group_questions, onboarding_dm_questions) VALUES (1, '@educai', '[]', '[]') ON CONFLICT(id) DO NOTHING");
 
-                return $response->withHeader('Location', '/admin/login')->withStatus(302);
+                $loginUrl = $app->getRouteCollector()->getRouteParser()->urlFor('login');
+                return $response->withHeader('Location', $loginUrl)->withStatus(302);
             }
         }
         return $twig->render($response, 'setup.twig');
     })->setName('setup');
 
     // Redirect all other requests to setup
-    $app->get('/{routes:.*}', function (Request $request, Response $response) {
-         return $response->withHeader('Location', '/admin/setup')->withStatus(302);
+    $app->get('/{routes:.*}', function (Request $request, Response $response) use ($app) {
+         $setupUrl = $app->getRouteCollector()->getRouteParser()->urlFor('setup');
+         return $response->withHeader('Location', $setupUrl)->withStatus(302);
     });
 
             } else {
     // --- Standard Routes ---
-    $app->map(['GET', 'POST'], '/login', function (Request $request, Response $response) use ($db, $twig) {
+    $app->map(['GET', 'POST'], '/login', function (Request $request, Response $response) use ($db, $twig, $app) {
         if ($request->getMethod() === 'POST') {
             $password = $request->getParsedBody()['password'] ?? '';
             $stmt = $db->query("SELECT password_hash FROM bot_admin LIMIT 1");
@@ -102,15 +107,17 @@ if (!$adminExists) {
                 Session::start();
                 Session::regenerate();
                 Session::set('admin_logged_in', true);
-                return $response->withHeader('Location', '/admin/')->withStatus(302);
+                $dashboardUrl = $app->getRouteCollector()->getRouteParser()->urlFor('dashboard');
+                return $response->withHeader('Location', $dashboardUrl)->withStatus(302);
             }
         }
         return $twig->render($response, 'login.twig');
     })->setName('login');
 
-    $app->get('/logout', function (Request $request, Response $response) {
+    $app->get('/logout', function (Request $request, Response $response) use ($app) {
         Session::destroy();
-        return $response->withHeader('Location', '/admin/login')->withStatus(302);
+        $loginUrl = $app->getRouteCollector()->getRouteParser()->urlFor('login');
+        return $response->withHeader('Location', $loginUrl)->withStatus(302);
     })->setName('logout');
 
     $app->get('/', function (Request $request, Response $response) use ($twig, $db) {
@@ -122,9 +129,6 @@ if (!$adminExists) {
         ];
         return $twig->render($response, 'dashboard.twig', ['stats' => $stats]);
     })->setName('dashboard')->add($authMiddleware);
-    
-    // Add other protected admin routes here...
 }
-
 
 $app->run(); 
