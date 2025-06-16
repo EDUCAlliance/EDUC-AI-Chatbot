@@ -36,10 +36,24 @@ $ncUrl = NextcloudBot\env('NC_URL');
 $inputContent = file_get_contents('php://input');
 $signature = $_SERVER['HTTP_X_NEXTCLOUD_TALK_SIGNATURE'] ?? '';
 $random = $_SERVER['HTTP_X_NEXTCLOUD_TALK_RANDOM'] ?? '';
+
+$logger->info('Webhook received - basic validation', [
+    'method' => $_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN',
+    'hasSignature' => !empty($signature),
+    'hasRandom' => !empty($random),
+    'contentLength' => strlen($inputContent),
+    'hasSecret' => !empty($secret)
+]);
+
 $generatedDigest = hash_hmac('sha256', $random . $inputContent, $secret);
 
 if (!hash_equals($generatedDigest, strtolower($signature))) {
-    $logger->warning('Invalid webhook signature received.');
+    $logger->warning('Invalid webhook signature received.', [
+        'expectedSignature' => $generatedDigest,
+        'receivedSignature' => strtolower($signature),
+        'random' => $random,
+        'contentLength' => strlen($inputContent)
+    ]);
     http_response_code(401);
     exit('Invalid signature.');
 }
@@ -69,8 +83,13 @@ $logger->info('Extracted webhook data', [
 if (empty($message) || empty($roomToken) || empty($userId)) {
     $logger->error('Webhook payload missing required fields.', [
         'message' => $message,
+        'messageEmpty' => empty($message),
         'roomToken' => $roomToken,
+        'roomTokenEmpty' => empty($roomToken),
         'userId' => $userId,
+        'userIdEmpty' => empty($userId),
+        'contentJson' => $contentJson,
+        'contentData' => $contentData,
         'rawData' => $data
     ]);
     http_response_code(400);
@@ -138,7 +157,7 @@ function sendReply(string $message, string $roomToken, int $replyToId, string $n
     ];
     $jsonBody = json_encode($requestBody);
     $random = bin2hex(random_bytes(32));
-    $hash = hash_hmac('sha256', $random . $jsonBody, $secret);
+    $hash = hash_hmac('sha256', $random . $requestBody['message'], $secret);
     
     $logger->info('Sending reply to Nextcloud', [
         'apiUrl' => $apiUrl,
