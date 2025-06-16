@@ -12,10 +12,36 @@ require_once __DIR__ . '/includes/functions.php';
 checkSetup();
 requireAuth();
 
-// Get statistics
-$systemStats = getSystemStats();
-$ragStats = getRAGStats();
-$systemInfo = getSystemInfo();
+// Get statistics with error handling
+try {
+    $systemStats = getSystemStats();
+} catch (Exception $e) {
+    $systemStats = ['total_messages' => 0, 'total_chats' => 0, 'messages_24h' => 0, 'admin_users' => 1];
+    error_log('Failed to get system stats: ' . $e->getMessage());
+}
+
+try {
+    $ragStats = getRAGStats();
+} catch (Exception $e) {
+    $ragStats = ['total_documents' => 0, 'total_embeddings' => 0, 'processed_documents' => 0, 'pending_documents' => 0, 'document_types' => []];
+    error_log('Failed to get RAG stats: ' . $e->getMessage());
+}
+
+try {
+    $systemInfo = getSystemInfo();
+} catch (Exception $e) {
+    $systemInfo = [
+        'php_version' => PHP_VERSION,
+        'php_memory_limit' => ini_get('memory_limit'),
+        'php_max_execution_time' => ini_get('max_execution_time'),
+        'cloudron_mode' => !empty(getenv('CLOUDRON_ENVIRONMENT')),
+        'database_type' => 'PostgreSQL',
+        'log_level' => 'INFO',
+        'extensions' => [],
+        'disk_usage' => ['usage_percentage' => 0, 'used' => '0 MB', 'total' => '0 MB']
+    ];
+    error_log('Failed to get system info: ' . $e->getMessage());
+}
 
 // Check for setup completion
 $setupComplete = isset($_GET['setup']) && $_GET['setup'] === 'complete';
