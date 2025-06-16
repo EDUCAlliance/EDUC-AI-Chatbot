@@ -25,7 +25,10 @@ class OnboardingManager
     public function getNextQuestion(array $roomConfig, array $globalSettings): array
     {
         $stage = $roomConfig['meta']['stage'] ?? 0;
-        $isGroup = $roomConfig['is_group'] ?? null;
+        $isGroup = $roomConfig['is_group'] ?? true;
+
+        // Add debug logging
+        error_log("OnboardingManager: stage={$stage}, isGroup=" . ($isGroup ? 'true' : 'false') . ", roomToken=" . ($roomConfig['room_token'] ?? 'unknown'));
 
         switch ($stage) {
             case 0:
@@ -34,16 +37,32 @@ class OnboardingManager
                 return ['question' => "Should I respond to every message, or only when I'm mentioned? (Please answer with 'always' or 'on_mention')", 'is_done' => false];
             default:
                 // Handle custom questions from admin panel
-                $customQuestions = $isGroup 
-                    ? ($globalSettings['onboarding_group_questions'] ?? [])
-                    : ($globalSettings['onboarding_dm_questions'] ?? []);
+                $customQuestionsRaw = $isGroup 
+                    ? ($globalSettings['onboarding_group_questions'] ?? '[]')
+                    : ($globalSettings['onboarding_dm_questions'] ?? '[]');
+                
+                // Add debug logging
+                error_log("OnboardingManager: customQuestionsRaw=" . var_export($customQuestionsRaw, true));
+                
+                // Decode JSON if it's a string, otherwise use as array
+                if (is_string($customQuestionsRaw)) {
+                    $customQuestions = json_decode($customQuestionsRaw, true) ?: [];
+                } else {
+                    $customQuestions = $customQuestionsRaw;
+                }
+                
+                error_log("OnboardingManager: customQuestions=" . var_export($customQuestions, true));
                 
                 $questionIndex = $stage - 2;
-                if (isset($customQuestions[$questionIndex])) {
+                error_log("OnboardingManager: questionIndex={$questionIndex}, available questions=" . count($customQuestions));
+                
+                if (isset($customQuestions[$questionIndex]) && !empty($customQuestions[$questionIndex])) {
+                    error_log("OnboardingManager: returning custom question: " . $customQuestions[$questionIndex]);
                     return ['question' => $customQuestions[$questionIndex], 'is_done' => false];
                 }
 
                 // End of onboarding
+                error_log("OnboardingManager: ending onboarding for room " . $roomConfig['room_token']);
                 $this->markOnboardingAsDone($roomConfig['room_token']);
                 return ['question' => "Thanks for setting me up! I'm ready to help.", 'is_done' => true];
         }
