@@ -1,24 +1,28 @@
 {
-    "name": "educ/nextcloud-bot",
-    "description": "Nextcloud AI Chatbot integrating SAIA API and Nextcloud Talk",
+    "name": "educ/nextcloud-ai-chatbot",
+    "description": "A Nextcloud Talk chatbot with RAG capabilities, managed via an admin panel.",
     "type": "project",
     "require": {
-        "php": "^8.1",
-        "slim/slim": "^4.12",
+        "php": ">=8.1",
+        "slim/slim": "^4.0",
         "slim/psr7": "^1.6",
-        "twig/twig": "^3.8",
-        "openai-php/client": "^0.5",
-        "pgvector/pgvector": "^0.2",
+        "twig/twig": "^3.0",
+        "openai-php/client": "^0.11.0",
+        "pgvector/pgvector": "^0.2.0",
         "vlucas/phpdotenv": "^5.5",
-        "symfony/polyfill-ctype": "^1.29",
-        "symfony/polyfill-mbstring": "^1.29"
+        "symfony/polyfill-mbstring": "^1.23",
+        "symfony/polyfill-ctype": "^1.23"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.5"
+        "phpunit/phpunit": "^9.5"
     },
     "autoload": {
         "psr-4": {
-            "NextcloudBot\\": "apps/nextcloud-bot/src/"
+            "NextcloudBot\\": "src/"
         }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
     }
 } 

@@ -1,0 +1,112 @@
+<?php
+
+declare(strict_types=1);
+
+namespace NextcloudBot\Services;
+
+use PDO;
+
+class OnboardingManager
+{
+    private PDO $db;
+
+    public function __construct(PDO $db)
+    {
+        $this->db = $db;
+    }
+
+    /**
+     * Gets the next onboarding question for a given room.
+     *
+     * @param array $roomConfig The current configuration of the room.
+     * @param array $globalSettings The global bot settings.
+     * @return array A dictionary with 'question' and 'is_done'.
+     */
+    public function getNextQuestion(array $roomConfig, array $globalSettings): array
+    {
+        $stage = $roomConfig['meta']['stage'] ?? 0;
+        $isGroup = $roomConfig['is_group'] ?? null;
+
+        switch ($stage) {
+            case 0:
+                return ['question' => "Is this a group chat or a direct message? (Please answer with 'group' or 'dm')", 'is_done' => false];
+            case 1:
+                return ['question' => "Should I respond to every message, or only when I'm mentioned? (Please answer with 'always' or 'on_mention')", 'is_done' => false];
+            default:
+                // Handle custom questions from admin panel
+                $customQuestions = $isGroup 
+                    ? ($globalSettings['onboarding_group_questions'] ?? [])
+                    : ($globalSettings['onboarding_dm_questions'] ?? []);
+                
+                $questionIndex = $stage - 2;
+                if (isset($customQuestions[$questionIndex])) {
+                    return ['question' => $customQuestions[$questionIndex], 'is_done' => false];
+                }
+
+                // End of onboarding
+                $this->markOnboardingAsDone($roomConfig['room_token']);
+                return ['question' => "Thanks for setting me up! I'm ready to help.", 'is_done' => true];
+        }
+    }
+
+    /**
+     * Processes a user's answer during the onboarding process.
+     *
+     * @param array $roomConfig The current room configuration.
+     * @param string $answer The user's answer.
+     */
+    public function processAnswer(array &$roomConfig, string $answer): void
+    {
+        $stage = $roomConfig['meta']['stage'] ?? 0;
+        $roomConfig['meta']['answers'] = $roomConfig['meta']['answers'] ?? [];
+        $answer = strtolower(trim($answer));
+
+        switch ($stage) {
+            case 0: // Is this a group or dm?
+                if (in_array($answer, ['group', 'g'])) {
+                    $roomConfig['is_group'] = true;
+                } elseif (in_array($answer, ['dm', 'd', 'direct message'])) {
+                    $roomConfig['is_group'] = false;
+                }
+                break;
+            case 1: // Mention mode
+                if (in_array($answer, ['always', 'a'])) {
+                    $roomConfig['mention_mode'] = 'always';
+                } elseif (in_array($answer, ['on_mention', 'mention', 'm'])) {
+                    $roomConfig['mention_mode'] = 'on_mention';
+                }
+                break;
+            default: // Custom questions
+                $roomConfig['meta']['answers'][] = $answer;
+                break;
+        }
+
+        // Advance to the next stage
+        $roomConfig['meta']['stage'] = ($stage + 1);
+        $this->updateRoomConfig($roomConfig);
+    }
+
+    private function updateRoomConfig(array $roomConfig): void
+    {
+        $sql = "UPDATE bot_room_config SET 
+                    is_group = :is_group,
+                    mention_mode = :mention_mode,
+                    meta = :meta
+                WHERE room_token = :room_token";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':is_group' => $roomConfig['is_group'],
+            ':mention_mode' => $roomConfig['mention_mode'],
+            ':meta' => json_encode($roomConfig['meta']),
+            ':room_token' => $roomConfig['room_token']
+        ]);
+    }
+
+    private function markOnboardingAsDone(string $roomToken): void
+    {
+        $sql = "UPDATE bot_room_config SET onboarding_done = TRUE WHERE room_token = :room_token";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':room_token' => $roomToken]);
+    }
+} 

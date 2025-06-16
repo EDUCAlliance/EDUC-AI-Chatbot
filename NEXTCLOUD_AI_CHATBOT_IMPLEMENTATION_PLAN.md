@@ -1,6 +1,6 @@
 # Nextcloud AI Chatbot – Implementation Plan
 
-> This plan is aligned with the project-wide *DEPLOYMENT_GUIDE.md* (composer handling, directory rules, security hardening) and *NEXTCLOUD_BOT_DOC.md* (webhook contract & signature flow). All paths assume they live under `/app/code/apps/nextcloud-bot/` when deployed by the PHP Git App Manager.
+> This plan is aligned with the project-wide *DEPLOYMENT_GUIDE.md* (composer handling, directory rules, security hardening) and *NEXTCLOUD_BOT_DOC.md* (webhook contract & signature flow). 
 
 ---
 

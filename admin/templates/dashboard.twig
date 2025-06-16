@@ -1,0 +1,40 @@
+{% extends "layout.twig" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block heading %}Dashboard{% endblock %}
+
+{% block content %}
+    <div class="columns is-multiline">
+        <div class="column is-one-quarter">
+            <div class="box has-text-centered">
+                <p class="heading">Documents</p>
+                <p class="title">{{ stats.docs }}</p>
+            </div>
+        </div>
+        <div class="column is-one-quarter">
+            <div class="box has-text-centered">
+                <p class="heading">Embeddings</p>
+                <p class="title">{{ stats.embeddings }}</p>
+            </div>
+        </div>
+        <div class="column is-one-quarter">
+            <div class="box has-text-centered">
+                <p class="heading">Conversations</p>
+                <p class="title">{{ stats.conversations }}</p>
+            </div>
+        </div>
+        <div class="column is-one-quarter">
+            <div class="box has-text-centered">
+                <p class="heading">Configured Rooms</p>
+                <p class="title">{{ stats.rooms }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="box mt-5">
+        <h2 class="subtitle">Welcome to the Admin Panel</h2>
+        <p>From here you can manage your chatbot's documents, configure its behavior, and monitor its activity.</p>
+        <p>Use the menu on the left to navigate through the different sections.</p>
+    </div>
+{% endblock %} 

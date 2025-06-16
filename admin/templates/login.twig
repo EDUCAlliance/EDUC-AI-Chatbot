@@ -1,0 +1,28 @@
+{% extends "layout.twig" %}
+
+{% block title %}Admin Login{% endblock %}
+
+{% block heading %}Admin Panel Login{% endblock %}
+
+{% block content %}
+    <div class="columns is-centered">
+        <div class="column is-half">
+            <div class="box">
+                <form method="post" action="{{ url_for('login') }}">
+                    <div class="field">
+                        <label class="label" for="password">Password</label>
+                        <div class="control">
+                            <input class="input" type="password" id="password" name="password" required>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="control">
+                            <button class="button is-primary" type="submit">Login</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %} 
