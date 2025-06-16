@@ -372,19 +372,9 @@ html {
     font-weight: 700;
     margin: 0;
     font-size: 2rem;
-    background: linear-gradient(135deg, var(--educ-green), var(--educ-pink), var(--educ-purple));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: gradientShift 6s ease-in-out infinite;
 }
 
-@keyframes gradientShift {
-    0%, 100% { background: linear-gradient(135deg, var(--educ-green), var(--educ-pink), var(--educ-purple)); }
-    25% { background: linear-gradient(135deg, var(--educ-pink), var(--educ-coral), var(--educ-green)); }
-    50% { background: linear-gradient(135deg, var(--educ-purple), var(--educ-green), var(--educ-pink)); }
-    75% { background: linear-gradient(135deg, var(--educ-coral), var(--educ-purple), var(--educ-green)); }
-}
+
 
 /* Notification System */
 .notification-container {
