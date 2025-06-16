@@ -73,6 +73,31 @@ if ($settingsExist == 0) {
     $db->exec("UPDATE bot_settings SET mention_name = '@educai' WHERE id = 1 AND mention_name IS NULL");
 }
 
+// Fix bot_room_config table structure if needed
+try {
+    // Check and fix room_type -> is_group column
+    $columnCheck = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'bot_room_config' AND column_name = 'room_type'")->fetchColumn();
+    if ($columnCheck) {
+        $db->exec("ALTER TABLE bot_room_config RENAME COLUMN room_type TO is_group_temp");
+        $db->exec("ALTER TABLE bot_room_config ADD COLUMN is_group BOOLEAN DEFAULT true");
+        $db->exec("UPDATE bot_room_config SET is_group = (is_group_temp = 'group')");
+        $db->exec("ALTER TABLE bot_room_config DROP COLUMN is_group_temp");
+    }
+    
+    // Check and fix onboarding_state -> onboarding_done column  
+    $stateCheck = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'bot_room_config' AND column_name = 'onboarding_state'")->fetchColumn();
+    if ($stateCheck) {
+        $db->exec("ALTER TABLE bot_room_config ADD COLUMN IF NOT EXISTS onboarding_done BOOLEAN DEFAULT false");
+        $db->exec("UPDATE bot_room_config SET onboarding_done = (onboarding_state = 'completed')");
+        $db->exec("ALTER TABLE bot_room_config DROP COLUMN onboarding_state");
+    }
+    
+    // Ensure mention_mode column exists
+    $db->exec("ALTER TABLE bot_room_config ADD COLUMN IF NOT EXISTS mention_mode TEXT DEFAULT 'on_mention'");
+} catch (\PDOException $e) {
+    error_log("Room config schema migration warning: " . $e->getMessage());
+}
+
 // --- Middleware & Initial State Check ---
 $adminExists = (bool) $db->query("SELECT id FROM bot_admin LIMIT 1")->fetchColumn();
 

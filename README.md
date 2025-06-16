@@ -1105,13 +1105,17 @@ POST /connect.php HTTP/1.1" 400 507
 #### 6. Database Schema Issues
 ```
 SQLSTATE[42703]: Undefined column: column "setting_key" does not exist
+SQLSTATE[42703]: Undefined column: column "room_type" does not exist
 ```
 
 **Solutions:**
-- The database schema was updated to use a singleton pattern for bot_settings
+- The database schema was updated to use the correct table structure
 - Access the admin panel once to trigger automatic schema migration
 - Or manually run: `psql your_database < fix_database_schema.sql`
-- Verify schema: `\d bot_settings` in psql should show `mention_name` column
+- Verify schema: 
+  - `\d bot_settings` should show `mention_name` column
+  - `\d bot_room_config` should show `is_group`, `mention_mode`, `onboarding_done` columns
+- If migration fails, recreate tables using `database.sql`
 
 #### 7. Memory Limit Errors
 ```
