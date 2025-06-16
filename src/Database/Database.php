@@ -50,7 +50,7 @@ class Database {
                 throw new Exception('PostgreSQL PDO driver not found in available drivers: ' . implode(', ', $availableDrivers));
             }
             
-            // Try Cloudron database connection using individual parameters (more reliable)
+            // Always use individual parameters (most reliable for Cloudron)
             $host = Environment::get('CLOUDRON_POSTGRESQL_HOST') ?? Environment::get('DB_HOST', 'localhost');
             $port = Environment::get('CLOUDRON_POSTGRESQL_PORT') ?? Environment::get('DB_PORT', '5432');
             $database = Environment::get('CLOUDRON_POSTGRESQL_DATABASE') ?? Environment::get('DB_NAME', 'chatbot');
@@ -67,29 +67,20 @@ class Database {
             ]);
             
             if (empty($host) || empty($database) || empty($username)) {
-                // Fallback to DATABASE_URL or CLOUDRON_POSTGRESQL_URL
-                $databaseUrl = Environment::get('DATABASE_URL') ?? Environment::get('CLOUDRON_POSTGRESQL_URL');
-                
-                if (!$databaseUrl) {
-                    throw new Exception('No database connection parameters found. Required: host, database, username');
-                }
-                
-                Logger::info('Using database URL connection');
-                $this->connection = new PDO($databaseUrl);
-                
-            } else {
-                // Use individual parameters (preferred for Cloudron)
-                $dsn = "pgsql:host={$host};port={$port};dbname={$database}";
-                
-                $options = [
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_TIMEOUT => 10
-                ];
-                
-                $this->connection = new PDO($dsn, $username, $password, $options);
-                Logger::info('Connected to database using individual parameters');
+                throw new Exception('Missing required database connection parameters. Required: CLOUDRON_POSTGRESQL_HOST, CLOUDRON_POSTGRESQL_DATABASE, CLOUDRON_POSTGRESQL_USERNAME');
             }
+            
+            // Use individual parameters (only method that works reliably)
+            $dsn = "pgsql:host={$host};port={$port};dbname={$database}";
+            
+            $options = [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_TIMEOUT => 10
+            ];
+            
+            $this->connection = new PDO($dsn, $username, $password, $options);
+            Logger::info('Connected to database using individual parameters');
             
             // Verify connection
             $version = $this->connection->query('SELECT version()')->fetchColumn();

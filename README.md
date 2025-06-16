@@ -142,7 +142,7 @@ educ-ai-talkbot/
 ├── connect.php           # Webhook endpoint
 ├── composer.json         # Dependencies
 ├── env.example          # Environment template
-└── auto-include.php     # Cloudron compatibility
+└── educ-bootstrap.php   # EDUC Cloudron bootstrap
 ```
 
 ### Database Schema

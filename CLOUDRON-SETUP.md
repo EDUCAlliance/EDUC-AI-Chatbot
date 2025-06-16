@@ -155,12 +155,13 @@ https://ai.cloudron.myownapp.net/apps/educ-ai/debug.php?debug_key=educ-debug-202
 
 ### **Database Connection Issues**
 
-**Status**: ✅ Already working in your setup
+**Status**: ✅ Working with Individual Parameters
 
-Your PostgreSQL connection is working correctly with these settings:
+Your PostgreSQL connection works perfectly using individual parameters:
 - Host: `postgresql`
 - Database: `db0d71c7b509cd46439b2717758060060e`
 - pgvector: Available
+- **Method**: Individual parameters (most reliable for Cloudron)
 
 ### **File Upload Issues**
 

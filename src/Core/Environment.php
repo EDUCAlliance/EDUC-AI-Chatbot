@@ -29,8 +29,8 @@ class Environment {
         }
         
         // Auto-include Cloudron custom environment if available
-        if (file_exists(__DIR__ . '/../../auto-include.php')) {
-            require_once __DIR__ . '/../../auto-include.php';
+        if (file_exists(__DIR__ . '/../../educ-bootstrap.php')) {
+            require_once __DIR__ . '/../../educ-bootstrap.php';
         }
         
         self::$loaded = true;
@@ -40,15 +40,11 @@ class Environment {
      * Load Cloudron-specific environment variables
      */
     private static function loadCloudronEnvironment(): void {
-        // Check if we're in a Cloudron environment
-        if (getenv('CLOUDRON_ENVIRONMENT') !== false) {
+        // Check if we're in a Cloudron environment (detect by presence of Cloudron PostgreSQL variables)
+        if (getenv('CLOUDRON_POSTGRESQL_HOST') !== false || getenv('CLOUDRON_ENVIRONMENT') !== false) {
             self::$envVars['CLOUDRON_MODE'] = 'true';
             
-            // Map Cloudron database variables to our expected format
-            if ($dbUrl = getenv('CLOUDRON_POSTGRESQL_URL')) {
-                self::$envVars['DATABASE_URL'] = $dbUrl;
-            }
-            
+            // Map Cloudron database variables to our expected format (individual parameters only)
             if ($dbHost = getenv('CLOUDRON_POSTGRESQL_HOST')) {
                 self::$envVars['DB_HOST'] = $dbHost;
             }

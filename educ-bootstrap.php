@@ -1,7 +1,7 @@
 <?php
 /**
- * Auto-include file for Cloudron deployment compatibility
- * This file is automatically created by the Cloudron deployment system
+ * EDUC Bootstrap file for Cloudron deployment compatibility
+ * This file handles environment setup specific to the EDUC AI TalkBot
  */
 
 // Check if we're running in Cloudron environment
@@ -23,10 +23,30 @@ if (getenv('CLOUDRON_ENVIRONMENT') || getenv('CLOUDRON_POSTGRESQL_HOST')) {
         $_ENV['APP_DIRECTORY'] = 'educ-ai-talkbot';
     }
     
-    // Ensure we have database connection variables
-    if (getenv('CLOUDRON_POSTGRESQL_URL') && !getenv('DATABASE_URL')) {
-        putenv('DATABASE_URL=' . getenv('CLOUDRON_POSTGRESQL_URL'));
-        $_ENV['DATABASE_URL'] = getenv('CLOUDRON_POSTGRESQL_URL');
+    // Map Cloudron database variables to standard format (individual parameters only)
+    if (getenv('CLOUDRON_POSTGRESQL_HOST') && !getenv('DB_HOST')) {
+        putenv('DB_HOST=' . getenv('CLOUDRON_POSTGRESQL_HOST'));
+        $_ENV['DB_HOST'] = getenv('CLOUDRON_POSTGRESQL_HOST');
+    }
+    
+    if (getenv('CLOUDRON_POSTGRESQL_PORT') && !getenv('DB_PORT')) {
+        putenv('DB_PORT=' . getenv('CLOUDRON_POSTGRESQL_PORT'));
+        $_ENV['DB_PORT'] = getenv('CLOUDRON_POSTGRESQL_PORT');
+    }
+    
+    if (getenv('CLOUDRON_POSTGRESQL_DATABASE') && !getenv('DB_NAME')) {
+        putenv('DB_NAME=' . getenv('CLOUDRON_POSTGRESQL_DATABASE'));
+        $_ENV['DB_NAME'] = getenv('CLOUDRON_POSTGRESQL_DATABASE');
+    }
+    
+    if (getenv('CLOUDRON_POSTGRESQL_USERNAME') && !getenv('DB_USER')) {
+        putenv('DB_USER=' . getenv('CLOUDRON_POSTGRESQL_USERNAME'));
+        $_ENV['DB_USER'] = getenv('CLOUDRON_POSTGRESQL_USERNAME');
+    }
+    
+    if (getenv('CLOUDRON_POSTGRESQL_PASSWORD') && !getenv('DB_PASSWORD')) {
+        putenv('DB_PASSWORD=' . getenv('CLOUDRON_POSTGRESQL_PASSWORD'));
+        $_ENV['DB_PASSWORD'] = getenv('CLOUDRON_POSTGRESQL_PASSWORD');
     }
     
     // Diagnostic logging for database connection
@@ -46,7 +66,7 @@ if (getenv('CLOUDRON_ENVIRONMENT') || getenv('CLOUDRON_POSTGRESQL_HOST')) {
             }
         }
         
-        // Check database environment variables
+        // Check database environment variables (individual parameters)
         $dbVars = [
             'CLOUDRON_POSTGRESQL_HOST',
             'CLOUDRON_POSTGRESQL_DATABASE', 
@@ -62,26 +82,28 @@ if (getenv('CLOUDRON_ENVIRONMENT') || getenv('CLOUDRON_POSTGRESQL_HOST')) {
         
         if (!empty($missingVars)) {
             error_log("{$logPrefix} WARNING: Missing database environment variables: " . implode(', ', $missingVars));
+        } else {
+            error_log("{$logPrefix} INFO: All required database parameters present");
         }
     }
     
     // Set default API endpoints if not configured
     if (!getenv('AI_API_ENDPOINT')) {
-        putenv('AI_API_ENDPOINT=https://chat.hpc.gwdg.de/v1');
-        $_ENV['AI_API_ENDPOINT'] = 'https://chat.hpc.gwdg.de/v1';
+        putenv('AI_API_ENDPOINT=https://chat.hpc.gwdg.de/v1/chat/completions');
+        $_ENV['AI_API_ENDPOINT'] = 'https://chat.hpc.gwdg.de/v1/chat/completions';
     }
     
     if (!getenv('EMBEDDING_API_ENDPOINT')) {
-        putenv('EMBEDDING_API_ENDPOINT=https://chat.hpc.gwdg.de/v1');
-        $_ENV['EMBEDDING_API_ENDPOINT'] = 'https://chat.hpc.gwdg.de/v1';
+        putenv('EMBEDDING_API_ENDPOINT=https://chat.hpc.gwdg.de/v1/embeddings');
+        $_ENV['EMBEDDING_API_ENDPOINT'] = 'https://chat.hpc.gwdg.de/v1/embeddings';
     }
     
     if (!getenv('MODELS_API_ENDPOINT')) {
-        putenv('MODELS_API_ENDPOINT=https://chat.hpc.gwdg.de/v1');
-        $_ENV['MODELS_API_ENDPOINT'] = 'https://chat.hpc.gwdg.de/v1';
+        putenv('MODELS_API_ENDPOINT=https://chat.hpc.gwdg.de/v1/models');
+        $_ENV['MODELS_API_ENDPOINT'] = 'https://chat.hpc.gwdg.de/v1/models';
     }
     
-    // Set default values for various settings
+    // Set default values for optional settings
     if (!getenv('USE_RAG')) {
         putenv('USE_RAG=true');
         $_ENV['USE_RAG'] = 'true';
@@ -95,6 +117,11 @@ if (getenv('CLOUDRON_ENVIRONMENT') || getenv('CLOUDRON_POSTGRESQL_HOST')) {
     if (!getenv('LOG_LEVEL')) {
         putenv('LOG_LEVEL=INFO');
         $_ENV['LOG_LEVEL'] = 'INFO';
+    }
+    
+    if (!getenv('DEBUG_MODE')) {
+        putenv('DEBUG_MODE=false');
+        $_ENV['DEBUG_MODE'] = 'false';
     }
 }
 ?> 

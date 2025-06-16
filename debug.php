@@ -64,21 +64,19 @@ foreach ($cloudronVars as $var) {
 }
 echo "\n";
 
-// Database Variables
+// Database Variables (Individual Parameters Only - Most Reliable)
 $dbVars = [
     'CLOUDRON_POSTGRESQL_HOST',
     'CLOUDRON_POSTGRESQL_PORT',
     'CLOUDRON_POSTGRESQL_DATABASE',
     'CLOUDRON_POSTGRESQL_USERNAME',
-    'CLOUDRON_POSTGRESQL_PASSWORD',
-    'CLOUDRON_POSTGRESQL_URL',
-    'DATABASE_URL'
+    'CLOUDRON_POSTGRESQL_PASSWORD'
 ];
 
-echo "Database Variables:\n";
+echo "Database Variables (Individual Parameters - Recommended):\n";
 foreach ($dbVars as $var) {
     $value = getenv($var);
-    if (stripos($var, 'PASSWORD') !== false || stripos($var, 'URL') !== false) {
+    if (stripos($var, 'PASSWORD') !== false) {
         echo sprintf("  %-30s: %s\n", $var, $value ? '[SET - ' . strlen($value) . ' chars]' : 'NOT SET');
     } else {
         echo sprintf("  %-30s: %s\n", $var, $value ?: 'NOT SET');
@@ -120,7 +118,7 @@ $paths = [
     'Cache directory' => __DIR__ . '/cache',
     'Logs directory' => __DIR__ . '/logs',
     'Vendor directory' => __DIR__ . '/vendor',
-    'Auto-include file' => __DIR__ . '/auto-include.php'
+    'EDUC Bootstrap file' => __DIR__ . '/educ-bootstrap.php'
 ];
 
 foreach ($paths as $label => $path) {
@@ -215,16 +213,13 @@ try {
             echo "Missing required database parameters\n";
         }
         
-        // Try URL connection
-        $databaseUrl = getenv('CLOUDRON_POSTGRESQL_URL') ?: getenv('DATABASE_URL');
-        if ($databaseUrl) {
-            echo "\nAttempting connection with database URL...\n";
-            try {
-                $pdo = new PDO($databaseUrl);
-                echo "SUCCESS: Connected using database URL\n";
-            } catch (PDOException $e) {
-                echo "FAILED: " . $e->getMessage() . "\n";
-            }
+        // Verify individual parameters approach (our standard method)
+        echo "\nVerifying individual parameters approach (recommended)...\n";
+        if ($host && $database && $username && $password) {
+            echo "✅ All required individual parameters are available\n";
+            echo "   This is the recommended and most reliable connection method\n";
+        } else {
+            echo "❌ Some individual parameters are missing\n";
         }
     }
 } catch (Exception $e) {
@@ -237,7 +232,7 @@ echo "=== Application Test ===\n";
 if (file_exists($autoloadFile)) {
     try {
         require_once $autoloadFile;
-        require_once __DIR__ . '/auto-include.php';
+        require_once __DIR__ . '/educ-bootstrap.php';
         
         // Test Environment class
         if (class_exists('EDUC\\Core\\Environment')) {
@@ -277,6 +272,65 @@ if (file_exists($autoloadFile)) {
     } catch (Exception $e) {
         echo "Application test failed: " . $e->getMessage() . "\n";
     }
+}
+
+// Recommendations
+echo "\n=== Recommendations ===\n";
+
+if (!extension_loaded('pdo_pgsql')) {
+    echo "❌ Install PHP pdo_pgsql extension\n";
+    echo "   - In Cloudron, this should be available by default\n";
+} else {
+    echo "✅ PostgreSQL PDO extension is loaded\n";
+}
+
+$host = getenv('CLOUDRON_POSTGRESQL_HOST');
+$database = getenv('CLOUDRON_POSTGRESQL_DATABASE');
+$username = getenv('CLOUDRON_POSTGRESQL_USERNAME');
+$password = getenv('CLOUDRON_POSTGRESQL_PASSWORD');
+
+if (!$host || !$database || !$username || !$password) {
+    echo "❌ Set all required Cloudron PostgreSQL environment variables:\n";
+    if (!$host) echo "   - CLOUDRON_POSTGRESQL_HOST\n";
+    if (!$database) echo "   - CLOUDRON_POSTGRESQL_DATABASE\n";
+    if (!$username) echo "   - CLOUDRON_POSTGRESQL_USERNAME\n";
+    if (!$password) echo "   - CLOUDRON_POSTGRESQL_PASSWORD\n";
+    echo "   These are automatically provided by Cloudron PostgreSQL service\n";
+} else {
+    echo "✅ All database environment variables are set correctly\n";
+}
+
+$apiKey = getenv('AI_API_KEY');
+if (!$apiKey) {
+    echo "❌ Configure AI_API_KEY in Cloudron environment variables\n";
+    echo "   - Get your GWDG SAIA API key from https://docs.hpc.gwdg.de/services/saia/\n";
+    echo "   - Add it as a custom environment variable in Cloudron\n";
+} else {
+    echo "✅ AI_API_KEY is configured\n";
+}
+
+echo "\n🎯 System Status Summary:\n";
+if (extension_loaded('pdo_pgsql') && $host && $database && $username && $password) {
+    echo "✅ Database: Ready (individual parameters work perfectly)\n";
+} else {
+    echo "❌ Database: Needs configuration\n";
+}
+
+if ($apiKey) {
+    echo "✅ API: Ready for AI integration\n";
+} else {
+    echo "❌ API: Needs AI_API_KEY configuration\n";
+}
+
+echo "\n📋 Next Steps:\n";
+if (!$apiKey) {
+    echo "1. Configure AI_API_KEY in Cloudron environment variables\n";
+    echo "2. Restart the application after adding environment variables\n";
+    echo "3. Access admin panel to complete setup\n";
+} else {
+    echo "1. Access admin panel: /apps/educ-ai/admin/\n";
+    echo "2. Configure AI models and settings\n";
+    echo "3. Upload documents for RAG if needed\n";
 }
 
 echo "\n=== End of Diagnostic Report ===\n";

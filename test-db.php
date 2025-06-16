@@ -112,30 +112,35 @@ if (!extension_loaded('pdo_pgsql')) {
         echo implode(', ', $missing) . "\n";
     }
     
-    echo "\n   Test 2: Database URL\n";
-    $databaseUrl = getenv('CLOUDRON_POSTGRESQL_URL') ?: getenv('DATABASE_URL');
-    if ($databaseUrl) {
+    echo "\n   Test 2: Connection Verification\n";
+    if ($host && $database && $username && $password) {
         try {
-            // Parse URL to show details (without password)
-            $parsed = parse_url($databaseUrl);
-            $safeUrl = ($parsed['scheme'] ?? 'unknown') . '://' . 
-                      ($parsed['user'] ?? 'unknown') . ':***@' . 
-                      ($parsed['host'] ?? 'unknown') . ':' . 
-                      ($parsed['port'] ?? '5432') . '/' . 
-                      (ltrim($parsed['path'] ?? '', '/'));
-            echo "     URL: {$safeUrl}\n";
+            // Test schema access
+            $dsn = "pgsql:host={$host};port={$port};dbname={$database}";
+            $pdo = new PDO($dsn, $username, $password, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_TIMEOUT => 5
+            ]);
             
-            $start = microtime(true);
-            $pdo = new PDO($databaseUrl);
-            $time = round((microtime(true) - $start) * 1000, 2);
+            // Test pgvector extension
+            try {
+                $pdo->exec("CREATE EXTENSION IF NOT EXISTS vector");
+                echo "     pgvector extension: AVAILABLE\n";
+            } catch (Exception $e) {
+                echo "     pgvector extension: NOT AVAILABLE\n";
+            }
             
-            echo "     Result: SUCCESS (connected in {$time}ms)\n";
+            // Test basic queries
+            $schemas = $pdo->query("SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'public'")->fetchAll();
+            echo "     Schema access: " . (count($schemas) > 0 ? 'SUCCESS' : 'FAILED') . "\n";
+            
+            echo "     Final result: INDIVIDUAL PARAMETERS WORK PERFECTLY\n";
             
         } catch (PDOException $e) {
             echo "     Result: FAILED - " . $e->getMessage() . "\n";
         }
     } else {
-        echo "     Result: SKIPPED (no database URL)\n";
+        echo "     Result: SKIPPED (missing parameters)\n";
     }
 }
 

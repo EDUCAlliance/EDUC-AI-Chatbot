@@ -6,7 +6,7 @@
  */
 
 require_once 'vendor/autoload.php';
-require_once __DIR__ . '/auto-include.php'; // Cloudron auto-include
+require_once __DIR__ . '/educ-bootstrap.php'; // Cloudron bootstrap
 
 use EDUC\Core\Environment;
 use EDUC\Core\Chatbot;

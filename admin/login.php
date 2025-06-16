@@ -6,7 +6,7 @@
 session_start();
 
 require_once '../vendor/autoload.php';
-require_once '../auto-include.php';
+require_once '../educ-bootstrap.php';
 
 use EDUC\Core\Environment;
 use EDUC\Utils\Logger;
