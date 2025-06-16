@@ -182,5 +182,389 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+<div class="content-wrapper">
+    <div class="container">
+        <div class="columns">
+            <div class="column is-12">
+                <h1 class="title">Welcome to EDUC AI Bot Admin Panel</h1>
+                <p>This is the main content area of the page.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Modern Navigation System
+    const navbarBurger = document.querySelector('.navbar-burger');
+    const sidebar = document.querySelector('.menu-sidebar');
+    
+    if (navbarBurger && sidebar) {
+        navbarBurger.addEventListener('click', () => {
+            navbarBurger.classList.toggle('is-active');
+            sidebar.classList.toggle('is-active');
+        });
+    }
+    
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', (event) => {
+        if (window.innerWidth <= 768) {
+            const isClickInsideSidebar = sidebar && sidebar.contains(event.target);
+            const isClickOnBurger = navbarBurger && navbarBurger.contains(event.target);
+            
+            if (!isClickInsideSidebar && !isClickOnBurger && sidebar && sidebar.classList.contains('is-active')) {
+                sidebar.classList.remove('is-active');
+                navbarBurger.classList.remove('is-active');
+            }
+        }
+    });
+    
+    // Notification System
+    window.showNotification = function(message, type = 'info', duration = 5000) {
+        const container = document.getElementById('notification-container');
+        if (!container) return;
+        
+        const notification = document.createElement('div');
+        notification.className = `notification is-${type}`;
+        notification.innerHTML = `
+            <button class="delete" aria-label="Close notification"></button>
+            <div class="notification-content">
+                <strong class="notification-title">${getNotificationTitle(type)}</strong>
+                <p class="notification-message">${message}</p>
+            </div>
+        `;
+        
+        container.appendChild(notification);
+        
+        // Handle delete button
+        const deleteBtn = notification.querySelector('.delete');
+        deleteBtn.addEventListener('click', () => {
+            removeNotification(notification);
+        });
+        
+        // Auto-remove after duration
+        if (duration > 0) {
+            setTimeout(() => {
+                removeNotification(notification);
+            }, duration);
+        }
+        
+        return notification;
+    };
+    
+    function getNotificationTitle(type) {
+        const titles = {
+            'success': '✓ Success',
+            'danger': '✗ Error',
+            'warning': '⚠ Warning',
+            'info': 'ℹ Information'
+        };
+        return titles[type] || titles['info'];
+    }
+    
+    function removeNotification(notification) {
+        if (notification && notification.parentNode) {
+            notification.classList.add('slide-out');
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }
+    }
+    
+    // Enhanced Form Handling with Notifications
+    function handleFormSubmission(form, successMessage = 'Settings saved successfully!') {
+        if (!form) return;
+        
+        const originalSubmit = form.onsubmit;
+        
+        form.addEventListener('submit', function(event) {
+            const submitButton = form.querySelector('button[type="submit"], input[type="submit"]');
+            
+            if (submitButton) {
+                submitButton.classList.add('is-loading');
+                submitButton.disabled = true;
+            }
+            
+            // Show loading notification
+            const loadingNotification = showNotification('Processing...', 'info', 0);
+            
+            // Simulate form processing (in real scenario, this would be handled by server response)
+            setTimeout(() => {
+                if (submitButton) {
+                    submitButton.classList.remove('is-loading');
+                    submitButton.disabled = false;
+                }
+                
+                // Remove loading notification
+                removeNotification(loadingNotification);
+                
+                // Check if form submission was successful (you'd check server response in real scenario)
+                const wasSuccessful = !form.querySelector('.help.is-danger, .message.is-danger');
+                
+                if (wasSuccessful) {
+                    showNotification(successMessage, 'success');
+                } else {
+                    showNotification('Please correct the errors and try again.', 'danger');
+                }
+            }, 1000);
+            
+            // Call original submit handler if it exists
+            if (originalSubmit) {
+                return originalSubmit.call(this, event);
+            }
+        });
+    }
+    
+    // Apply enhanced form handling to all forms
+    document.querySelectorAll('form').forEach(form => {
+        // Skip login and setup forms
+        if (form.closest('.login-container') || form.classList.contains('login-form')) {
+            return;
+        }
+        
+        const formTitle = form.closest('.box')?.querySelector('.title')?.textContent || 
+                          form.querySelector('.label')?.textContent || 
+                          'Settings';
+        
+        handleFormSubmission(form, `${formTitle.trim()} updated successfully!`);
+    });
+    
+    // Enhanced delete confirmations
+    document.querySelectorAll('button[onclick*="confirm"], a[onclick*="confirm"]').forEach(element => {
+        const originalOnclick = element.onclick;
+        
+        element.onclick = function(event) {
+            event.preventDefault();
+            
+            const confirmation = confirm('Are you sure you want to delete this item? This action cannot be undone.');
+            
+            if (confirmation) {
+                showNotification('Deleting...', 'warning', 2000);
+                
+                // Execute original onclick after a brief delay
+                setTimeout(() => {
+                    if (originalOnclick) {
+                        originalOnclick.call(this, event);
+                    }
+                    showNotification('Item deleted successfully.', 'success');
+                }, 500);
+            }
+            
+            return false;
+        };
+    });
+    
+    // Enhanced file upload feedback
+    document.querySelectorAll('input[type="file"]').forEach(fileInput => {
+        fileInput.addEventListener('change', function() {
+            const fileName = this.files[0]?.name;
+            const fileSize = this.files[0]?.size;
+            
+            if (fileName) {
+                const sizeStr = fileSize ? ` (${formatFileSize(fileSize)})` : '';
+                showNotification(`File selected: ${fileName}${sizeStr}`, 'info', 3000);
+            }
+        });
+    });
+    
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    // Enhanced table interactions
+    document.querySelectorAll('.table tbody tr').forEach(row => {
+        row.addEventListener('mouseenter', function() {
+            this.style.background = 'linear-gradient(135deg, #f8fafc, #f1f5f9)';
+        });
+        
+        row.addEventListener('mouseleave', function() {
+            this.style.background = '';
+        });
+    });
+    
+    // Copy to clipboard functionality
+    window.copyToClipboard = function(text, successMessage = 'Copied to clipboard!') {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(() => {
+                showNotification(successMessage, 'success', 2000);
+            }).catch(() => {
+                fallbackCopyToClipboard(text, successMessage);
+            });
+        } else {
+            fallbackCopyToClipboard(text, successMessage);
+        }
+    };
+    
+    function fallbackCopyToClipboard(text, successMessage) {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            document.execCommand('copy');
+            showNotification(successMessage, 'success', 2000);
+        } catch (err) {
+            showNotification('Failed to copy to clipboard', 'danger', 3000);
+        }
+        
+        document.body.removeChild(textArea);
+    }
+    
+    // Enhanced loading states for buttons
+    document.querySelectorAll('.button').forEach(button => {
+        if (button.type === 'submit') return; // Already handled by form submission
+        
+        button.addEventListener('click', function() {
+            if (this.classList.contains('is-loading')) return;
+            
+            // Add loading state for buttons that trigger navigation or actions
+            if (this.href || this.onclick) {
+                this.classList.add('is-loading');
+                
+                // Remove loading state after navigation or action
+                setTimeout(() => {
+                    this.classList.remove('is-loading');
+                }, 2000);
+            }
+        });
+    });
+    
+    // Smooth scrolling for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function(e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }
+        });
+    });
+    
+    // Auto-focus first input in forms
+    const firstInput = document.querySelector('.content-wrapper form input:not([type="hidden"]):not([type="submit"]), .content-wrapper form textarea, .content-wrapper form select');
+    if (firstInput && !firstInput.value) {
+        firstInput.focus();
+    }
+    
+    // Enhanced dropdown behavior
+    document.querySelectorAll('.navbar-item.has-dropdown').forEach(dropdown => {
+        const trigger = dropdown.querySelector('.navbar-link');
+        const menu = dropdown.querySelector('.navbar-dropdown');
+        
+        if (trigger && menu) {
+            let timeout;
+            
+            dropdown.addEventListener('mouseenter', () => {
+                clearTimeout(timeout);
+                dropdown.classList.add('is-active');
+            });
+            
+            dropdown.addEventListener('mouseleave', () => {
+                timeout = setTimeout(() => {
+                    dropdown.classList.remove('is-active');
+                }, 200);
+            });
+        }
+    });
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(event) {
+        // Escape key to close notifications
+        if (event.key === 'Escape') {
+            document.querySelectorAll('.notification').forEach(notification => {
+                removeNotification(notification);
+            });
+            
+            // Close mobile sidebar if open
+            if (sidebar && sidebar.classList.contains('is-active')) {
+                sidebar.classList.remove('is-active');
+                navbarBurger.classList.remove('is-active');
+            }
+        }
+        
+        // Ctrl/Cmd + S to save forms
+        if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+            event.preventDefault();
+            const activeForm = document.querySelector('form:not(.login-form)');
+            if (activeForm) {
+                const submitButton = activeForm.querySelector('button[type="submit"], input[type="submit"]');
+                if (submitButton) {
+                    submitButton.click();
+                    showNotification('Saving...', 'info', 2000);
+                }
+            }
+        }
+    });
+    
+    // Legacy functions for backward compatibility
+    window.showFormLoading = function(form) {
+        const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+        if (submitBtn) {
+            submitBtn.classList.add('is-loading');
+            submitBtn.disabled = true;
+        }
+    };
+
+    window.hideFormLoading = function(form) {
+        const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+        if (submitBtn) {
+            submitBtn.classList.remove('is-loading');
+            submitBtn.disabled = false;
+        }
+    };
+
+    window.openModal = function(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.classList.add('is-active');
+        }
+    };
+
+    window.closeModal = function(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.classList.remove('is-active');
+        }
+    };
+
+    // Initialize modal close buttons
+    document.querySelectorAll('.modal-background, .modal-close').forEach(element => {
+        element.addEventListener('click', function() {
+            const modal = this.closest('.modal');
+            if (modal) {
+                modal.classList.remove('is-active');
+            }
+        });
+    });
+
+    // Initialize file input names
+    document.querySelectorAll('.file-input').forEach(input => {
+        input.addEventListener('change', function() {
+            const fileName = this.files[0]?.name || 'No file chosen';
+            const fileNameElement = this.parentNode.parentNode.querySelector('.file-name');
+            if (fileNameElement) {
+                fileNameElement.textContent = fileName;
+            }
+        });
+    });
+    
+    console.log('🚀 EDUC AI Bot Admin Panel - Modern UI Initialized');
+});
+</script>
+
 </body>
 </html> 

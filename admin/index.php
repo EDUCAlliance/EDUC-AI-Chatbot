@@ -58,6 +58,23 @@ try {
     $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_top_k INTEGER DEFAULT 3");
     $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_chunk_size INTEGER DEFAULT 250");
     $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_chunk_overlap INTEGER DEFAULT 25");
+    
+    // Add processing status column to bot_docs
+    $db->exec("ALTER TABLE bot_docs ADD COLUMN IF NOT EXISTS processing_status TEXT DEFAULT 'completed'");
+    
+    // Create progress tracking table
+    $db->exec("CREATE TABLE IF NOT EXISTS bot_processing_progress (
+        id SERIAL PRIMARY KEY,
+        doc_id INTEGER REFERENCES bot_docs(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'pending',
+        progress INTEGER DEFAULT 0,
+        current_chunk INTEGER DEFAULT 0,
+        total_chunks INTEGER DEFAULT 0,
+        error_message TEXT,
+        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP,
+        UNIQUE(doc_id)
+    )");
 } catch (\PDOException $e) {
     // Schema migration might fail on some PostgreSQL versions, but that's okay if columns already exist
     error_log("Schema migration warning: " . $e->getMessage());
@@ -215,11 +232,264 @@ $app->post('/documents/upload', function (Request $request, Response $response) 
     return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('documents'))->withStatus(302);
 })->setName('documents-upload')->add($authMiddleware);
 
-$app->post('/documents/delete', function (Request $request, Response $response) use ($db, $app, $logger) {
-    $docId = $request->getParsedBody()['doc_id'] ?? null;
+// Async upload endpoint
+$app->post('/documents/upload-async', function (Request $request, Response $response) use ($db, $logger) {
+    try {
+        $uploadedFile = $request->getUploadedFiles()['document'];
+        
+        if ($uploadedFile->getError() !== UPLOAD_ERR_OK) {
+            throw new \Exception('File upload error: ' . $uploadedFile->getError());
+        }
+        
+        $uploadDir = APP_ROOT . '/uploads';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0775, true);
+        }
+        
+        $basename = basename($uploadedFile->getClientFilename());
+        $targetPath = $uploadDir . '/' . $basename;
+        $uploadedFile->moveTo($targetPath);
+        
+        $content = file_get_contents($targetPath);
+        $checksum = hash('sha256', $content);
+        
+        // Check for duplicates
+        $stmt = $db->prepare("SELECT id FROM bot_docs WHERE checksum = ?");
+        $stmt->execute([$checksum]);
+        if ($existingDoc = $stmt->fetch()) {
+            unlink($targetPath);
+            throw new \Exception('Document already exists');
+        }
+        
+        // Insert document record
+        $stmt = $db->prepare("INSERT INTO bot_docs (filename, path, checksum, processing_status) VALUES (?, ?, ?, 'pending')");
+        $stmt->execute([$basename, $targetPath, $checksum]);
+        $docId = $db->lastInsertId();
+        
+        // Initialize progress tracking
+        $stmt = $db->prepare("INSERT INTO bot_processing_progress (doc_id, status, progress, started_at) VALUES (?, 'started', 0, NOW())");
+        $stmt->execute([$docId]);
+        
+        $logger->info('Document uploaded, starting background processing', ['doc_id' => $docId, 'filename' => $basename]);
+        
+        $response->getBody()->write(json_encode([
+            'success' => true,
+            'doc_id' => $docId,
+            'filename' => $basename
+        ]));
+        
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (\Exception $e) {
+        $logger->error('Upload failed', ['error' => $e->getMessage()]);
+        
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => $e->getMessage()
+        ]));
+        
+        return $response->withHeader('Content-Type', 'application/json')->withStatus(400);
+    }
+})->setName('documents-upload-async')->add($authMiddleware);
 
-    if ($docId) {
+// Server-Sent Events endpoint for embedding progress
+$app->get('/embedding-progress/{docId}', function (Request $request, Response $response, array $args) use ($db, $embeddingService, $logger) {
+    $docId = (int)$args['docId'];
+    
+    // Set SSE headers
+    $response = $response
+        ->withHeader('Content-Type', 'text/event-stream')
+        ->withHeader('Cache-Control', 'no-cache')
+        ->withHeader('Connection', 'keep-alive')
+        ->withHeader('Access-Control-Allow-Origin', '*');
+    
+    // Get document info
+    $stmt = $db->prepare("SELECT filename, path FROM bot_docs WHERE id = ?");
+    $stmt->execute([$docId]);
+    $doc = $stmt->fetch();
+    
+    if (!$doc) {
+        $response->getBody()->write("data: " . json_encode(['error' => 'Document not found']) . "\n\n");
+        return $response;
+    }
+    
+    try {
+        // Start processing in background
+        $embeddingService->generateAndStoreEmbeddingsAsync($docId, file_get_contents($doc['path']));
+        
+        // Stream progress updates
+        while (true) {
+            $stmt = $db->prepare("SELECT status, progress, current_chunk, total_chunks, error_message, completed_at FROM bot_processing_progress WHERE doc_id = ?");
+            $stmt->execute([$docId]);
+            $progress = $stmt->fetch();
+            
+            if (!$progress) {
+                break;
+            }
+            
+            $data = [
+                'progress' => (int)$progress['progress'],
+                'status' => $progress['status'],
+                'completed' => !empty($progress['completed_at']),
+                'error' => $progress['error_message']
+            ];
+            
+            if ($progress['total_chunks'] > 0) {
+                $data['status'] = sprintf('Processing chunk %d of %d...', $progress['current_chunk'], $progress['total_chunks']);
+            }
+            
+            if ($data['completed']) {
+                // Get final stats
+                $statsStmt = $db->prepare("SELECT COUNT(*) as embeddings FROM bot_embeddings WHERE doc_id = ?");
+                $statsStmt->execute([$docId]);
+                $stats = $statsStmt->fetch();
+                
+                $data['stats'] = [
+                    'chunks' => $progress['total_chunks'],
+                    'embeddings' => $stats['embeddings']
+                ];
+                
+                $data['document'] = [
+                    'id' => $docId,
+                    'filename' => $doc['filename'],
+                    'created_at' => date('Y-m-d H:i:s')
+                ];
+                
+                // Update document status
+                $db->prepare("UPDATE bot_docs SET processing_status = 'completed' WHERE id = ?")->execute([$docId]);
+            }
+            
+            if ($data['error']) {
+                // Update document status
+                $db->prepare("UPDATE bot_docs SET processing_status = 'failed' WHERE id = ?")->execute([$docId]);
+            }
+            
+            $response->getBody()->write("data: " . json_encode($data) . "\n\n");
+            
+            if ($data['completed'] || $data['error']) {
+                break;
+            }
+            
+            if (connection_aborted()) {
+                break;
+            }
+            
+            sleep(1);
+        }
+        
+    } catch (\Exception $e) {
+        $logger->error('Embedding processing failed', ['doc_id' => $docId, 'error' => $e->getMessage()]);
+        
+        $data = [
+            'progress' => 0,
+            'status' => 'Processing failed',
+            'completed' => false,
+            'error' => $e->getMessage()
+        ];
+        
+        $response->getBody()->write("data: " . json_encode($data) . "\n\n");
+        
+        // Update progress table
+        $db->prepare("UPDATE bot_processing_progress SET status = 'failed', error_message = ? WHERE doc_id = ?")
+           ->execute([$e->getMessage(), $docId]);
+        $db->prepare("UPDATE bot_docs SET processing_status = 'failed' WHERE id = ?")->execute([$docId]);
+    }
+    
+    return $response;
+})->setName('embedding-progress')->add($authMiddleware);
+
+// Fallback polling endpoint
+$app->get('/embedding-status/{docId}', function (Request $request, Response $response, array $args) use ($db) {
+    $docId = (int)$args['docId'];
+    
+    $stmt = $db->prepare("SELECT status, progress, current_chunk, total_chunks, error_message, completed_at FROM bot_processing_progress WHERE doc_id = ?");
+    $stmt->execute([$docId]);
+    $progress = $stmt->fetch();
+    
+    if (!$progress) {
+        $response->getBody()->write(json_encode(['error' => 'Progress not found']));
+        return $response->withHeader('Content-Type', 'application/json')->withStatus(404);
+    }
+    
+    $data = [
+        'progress' => (int)$progress['progress'],
+        'status' => $progress['status'],
+        'completed' => !empty($progress['completed_at']),
+        'error' => $progress['error_message']
+    ];
+    
+    if ($progress['total_chunks'] > 0) {
+        $data['status'] = sprintf('Processing chunk %d of %d...', $progress['current_chunk'], $progress['total_chunks']);
+    }
+    
+    if ($data['completed']) {
+        $statsStmt = $db->prepare("SELECT COUNT(*) as embeddings FROM bot_embeddings WHERE doc_id = ?");
+        $statsStmt->execute([$docId]);
+        $stats = $statsStmt->fetch();
+        
+        $data['stats'] = [
+            'chunks' => $progress['total_chunks'],
+            'embeddings' => $stats['embeddings']
+        ];
+        
+        $docStmt = $db->prepare("SELECT filename FROM bot_docs WHERE id = ?");
+        $docStmt->execute([$docId]);
+        $doc = $docStmt->fetch();
+        
+        $data['document'] = [
+            'id' => $docId,
+            'filename' => $doc['filename'],
+            'created_at' => date('Y-m-d H:i:s')
+        ];
+    }
+    
+    $response->getBody()->write(json_encode($data));
+    return $response->withHeader('Content-Type', 'application/json');
+})->setName('embedding-status')->add($authMiddleware);
+
+// Cancel processing endpoint
+$app->post('/cancel-processing/{docId}', function (Request $request, Response $response, array $args) use ($db, $logger) {
+    $docId = (int)$args['docId'];
+    
+    try {
+        // Mark processing as cancelled
+        $stmt = $db->prepare("UPDATE bot_processing_progress SET status = 'cancelled', error_message = 'Cancelled by user' WHERE doc_id = ? AND completed_at IS NULL");
+        $stmt->execute([$docId]);
+        
+        // Mark document as failed
+        $stmt = $db->prepare("UPDATE bot_docs SET processing_status = 'cancelled' WHERE id = ?");
+        $stmt->execute([$docId]);
+        
+        $logger->info('Processing cancelled by user', ['doc_id' => $docId]);
+        
+        $response->getBody()->write(json_encode(['success' => true]));
+        return $response->withHeader('Content-Type', 'application/json');
+        
+    } catch (\Exception $e) {
+        $logger->error('Failed to cancel processing', ['doc_id' => $docId, 'error' => $e->getMessage()]);
+        
+        $response->getBody()->write(json_encode([
+            'success' => false,
+            'error' => $e->getMessage()
+        ]));
+        return $response->withHeader('Content-Type', 'application/json')->withStatus(500);
+    }
+})->setName('cancel-processing')->add($authMiddleware);
+
+$app->post('/documents/delete', function (Request $request, Response $response) use ($db, $app, $logger) {
+    $contentType = $request->getHeaderLine('Content-Type');
+    
+    if (strpos($contentType, 'application/json') !== false) {
+        // Handle JSON request (from JavaScript)
+        $body = $request->getBody()->getContents();
+        $data = json_decode($body, true);
+        $docId = $data['doc_id'] ?? null;
+        
         try {
+            if (!$docId) {
+                throw new \Exception('Document ID is required');
+            }
+            
             $db->beginTransaction();
 
             // Find the document to get its path for deletion
@@ -236,6 +506,10 @@ $app->post('/documents/delete', function (Request $request, Response $response) 
                 }
             }
 
+            // Delete progress tracking
+            $stmt = $db->prepare("DELETE FROM bot_processing_progress WHERE doc_id = ?");
+            $stmt->execute([(int)$docId]);
+            
             // Delete embeddings associated with the document
             $stmt = $db->prepare("DELETE FROM bot_embeddings WHERE doc_id = ?");
             $stmt->execute([(int)$docId]);
@@ -247,13 +521,65 @@ $app->post('/documents/delete', function (Request $request, Response $response) 
             $logger->info('Deleted document record from database', ['doc_id' => $docId]);
 
             $db->commit();
-        } catch (\PDOException $e) {
+            
+            $response->getBody()->write(json_encode(['success' => true]));
+            return $response->withHeader('Content-Type', 'application/json');
+            
+        } catch (\Exception $e) {
             $db->rollBack();
             $logger->error('Failed to delete document', ['error' => $e->getMessage(), 'doc_id' => $docId]);
+            
+            $response->getBody()->write(json_encode([
+                'success' => false,
+                'error' => $e->getMessage()
+            ]));
+            return $response->withHeader('Content-Type', 'application/json')->withStatus(500);
         }
-    }
+    } else {
+        // Handle form request (legacy)
+        $docId = $request->getParsedBody()['doc_id'] ?? null;
 
-    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('documents'))->withStatus(302);
+        if ($docId) {
+            try {
+                $db->beginTransaction();
+
+                // Find the document to get its path for deletion
+                $stmt = $db->prepare("SELECT path FROM bot_docs WHERE id = ?");
+                $stmt->execute([(int)$docId]);
+                $doc = $stmt->fetch();
+
+                if ($doc && !empty($doc['path'])) {
+                    if (file_exists($doc['path'])) {
+                        unlink($doc['path']);
+                        $logger->info('Deleted document file', ['path' => $doc['path']]);
+                    } else {
+                        $logger->warning('Document file not found, but proceeding with DB deletion', ['path' => $doc['path']]);
+                    }
+                }
+
+                // Delete progress tracking
+                $stmt = $db->prepare("DELETE FROM bot_processing_progress WHERE doc_id = ?");
+                $stmt->execute([(int)$docId]);
+                
+                // Delete embeddings associated with the document
+                $stmt = $db->prepare("DELETE FROM bot_embeddings WHERE doc_id = ?");
+                $stmt->execute([(int)$docId]);
+                $logger->info('Deleted embeddings for document', ['doc_id' => $docId]);
+
+                // Delete the document record itself
+                $stmt = $db->prepare("DELETE FROM bot_docs WHERE id = ?");
+                $stmt->execute([(int)$docId]);
+                $logger->info('Deleted document record from database', ['doc_id' => $docId]);
+
+                $db->commit();
+            } catch (\PDOException $e) {
+                $db->rollBack();
+                $logger->error('Failed to delete document', ['error' => $e->getMessage(), 'doc_id' => $docId]);
+            }
+        }
+
+        return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('documents'))->withStatus(302);
+    }
 })->setName('documents-delete')->add($authMiddleware);
 
 $app->get('/models', function (Request $request, Response $response) use ($twig, $db, $apiClient) {

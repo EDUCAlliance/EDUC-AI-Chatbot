@@ -70,6 +70,121 @@ class EmbeddingService
     }
 
     /**
+     * Processes a document's content asynchronously with progress tracking.
+     *
+     * @param int $docId The ID of the document being processed.
+     * @param string $content The full text content of the document.
+     * @return bool True if all chunks were processed and stored successfully.
+     */
+    public function generateAndStoreEmbeddingsAsync(int $docId, string $content): bool
+    {
+        try {
+            $settingsStmt = $this->db->query("SELECT rag_chunk_size, rag_chunk_overlap FROM bot_settings WHERE id = 1");
+            $ragSettings = $settingsStmt->fetch();
+            $chunkSize = $ragSettings['rag_chunk_size'] ?? 250;
+            $chunkOverlap = $ragSettings['rag_chunk_overlap'] ?? 25;
+
+            $chunks = $this->chunkText($content, $chunkSize, $chunkOverlap);
+            $totalChunks = count($chunks);
+            
+            // Update progress with total chunks
+            $this->updateProgress($docId, 0, 'Starting processing...', 0, $totalChunks);
+            
+            $this->logger->info('Starting async embedding generation', [
+                'doc_id' => $docId,
+                'total_chunks' => $totalChunks
+            ]);
+
+            $successCount = 0;
+            
+            foreach ($chunks as $index => $chunk) {
+                // Update progress
+                $progress = (int)(($index / $totalChunks) * 100);
+                $this->updateProgress($docId, $progress, "Processing chunk " . ($index + 1) . " of $totalChunks...", $index + 1, $totalChunks);
+                
+                $embeddingResponse = $this->apiClient->getEmbedding($chunk);
+
+                if (isset($embeddingResponse['error']) || empty($embeddingResponse['data'][0]['embedding'])) {
+                    $this->logger->error('Failed to get embedding for chunk', [
+                        'doc_id' => $docId,
+                        'chunk_index' => $index,
+                        'error' => $embeddingResponse['error'] ?? 'Empty embedding data'
+                    ]);
+                    continue; // Skip to the next chunk
+                }
+
+                $embedding = $embeddingResponse['data'][0]['embedding'];
+                $stored = $this->vectorStore->storeEmbedding($docId, $index, $embedding, $chunk);
+
+                if ($stored) {
+                    $successCount++;
+                } else {
+                    $this->logger->error('Failed to store embedding for chunk', [
+                        'doc_id' => $docId,
+                        'chunk_index' => $index,
+                    ]);
+                }
+                
+                // Small delay to prevent overwhelming the API
+                usleep(100000); // 0.1 seconds
+            }
+            
+            // Mark as completed
+            $this->updateProgress($docId, 100, 'Processing completed!', $totalChunks, $totalChunks, true);
+            
+            $this->logger->info('Async embedding generation completed', [
+                'doc_id' => $docId,
+                'total_chunks' => $totalChunks,
+                'successful_chunks' => $successCount
+            ]);
+
+            return $successCount === $totalChunks;
+            
+        } catch (\Exception $e) {
+            $this->logger->error('Async embedding generation failed', [
+                'doc_id' => $docId,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Update progress with error
+            $this->updateProgress($docId, 0, 'Processing failed', 0, 0, false, $e->getMessage());
+            
+            return false;
+        }
+    }
+
+    /**
+     * Updates the progress tracking for a document.
+     */
+    private function updateProgress(int $docId, int $progress, string $status, int $currentChunk = 0, int $totalChunks = 0, bool $completed = false, string $errorMessage = null): void
+    {
+        try {
+            $stmt = $this->db->prepare("
+                UPDATE bot_processing_progress 
+                SET status = ?, progress = ?, current_chunk = ?, total_chunks = ?, error_message = ?, completed_at = ?
+                WHERE doc_id = ?
+            ");
+            
+            $completedAt = $completed ? date('Y-m-d H:i:s') : null;
+            
+            $stmt->execute([
+                $status,
+                $progress,
+                $currentChunk,
+                $totalChunks,
+                $errorMessage,
+                $completedAt,
+                $docId
+            ]);
+        } catch (\PDOException $e) {
+            $this->logger->error('Failed to update progress', [
+                'doc_id' => $docId,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
      * Splits a text into smaller chunks based on a simple word count.
      *
      * @param string $text The text to split.
