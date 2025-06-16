@@ -310,16 +310,33 @@ $logger->info('Room config loaded', [
 if ($roomConfig['onboarding_done'] == false) {
     $logger->info('Processing onboarding for room', ['roomToken' => $roomToken, 'message' => $message]);
     
-    // Process the answer
+    // Determine current onboarding stage
+    $currentStage = $roomConfig['meta']['stage'] ?? 0;
+
+    // If this is the very first touch (stage 0, no answers yet), we have not asked ANY question.
+    // Ask the first question *without* processing the current message as an answer.
+    if ($currentStage === 0 && empty($roomConfig['meta']['answers'])) {
+        $settingsStmt = $db->query("SELECT * FROM bot_settings WHERE id = 1");
+        $globalSettings = $settingsStmt->fetch() ?: [];
+        $nextStep = $onboardingManager->getNextQuestion($roomConfig, $globalSettings);
+
+        $logger->info('Sending first onboarding question', ['question' => $nextStep['question']]);
+        $success = sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
+        if (!$success) {
+            $logger->error('Failed to send onboarding reply');
+        }
+        exit;
+    }
+
+    // For all subsequent steps we first *process* the previous answer
     $onboardingManager->processAnswer($roomConfig, $message);
-    
-    // Get next question
+
+    // Get the next question (or completion message)
     $settingsStmt = $db->query("SELECT * FROM bot_settings WHERE id = 1");
     $globalSettings = $settingsStmt->fetch() ?: [];
     $nextStep = $onboardingManager->getNextQuestion($roomConfig, $globalSettings);
-    
+
     $logger->info('Sending onboarding question', ['question' => $nextStep['question']]);
-    
     $success = sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
     if (!$success) {
         $logger->error('Failed to send onboarding reply');
