@@ -203,13 +203,44 @@ if (!$roomConfig) {
     
     // Create initial record - use the correct database schema
     $meta = ['stage' => 0, 'answers' => []];
-    $stmt = $db->prepare("INSERT INTO bot_room_config (room_token, is_group, mention_mode, onboarding_done, meta) VALUES (?, ?, ?, ?, ?)");
-    $stmt->execute([$roomToken, $isGroup, 'on_mention', false, json_encode($meta)]);
+    
+    // Ensure boolean values are properly typed for PostgreSQL
+    $isGroupBool = $isGroup ? true : false;
+    $onboardingDoneBool = false;
+    
+    $logger->info('Inserting room config', [
+        'roomToken' => $roomToken,
+        'isGroup' => $isGroupBool,
+        'onboardingDone' => $onboardingDoneBool
+    ]);
+    
+    try {
+        $stmt = $db->prepare("INSERT INTO bot_room_config (room_token, is_group, mention_mode, onboarding_done, meta) VALUES (?, ?, ?, ?, ?)");
+        
+        // Bind parameters with explicit types for PostgreSQL boolean compatibility
+        $stmt->bindValue(1, $roomToken, \PDO::PARAM_STR);
+        $stmt->bindValue(2, $isGroupBool, \PDO::PARAM_BOOL);
+        $stmt->bindValue(3, 'on_mention', \PDO::PARAM_STR);
+        $stmt->bindValue(4, $onboardingDoneBool, \PDO::PARAM_BOOL);
+        $stmt->bindValue(5, json_encode($meta), \PDO::PARAM_STR);
+        
+        $stmt->execute();
+        $logger->info('Successfully created room config');
+    } catch (\PDOException $e) {
+        $logger->error('Failed to create room config', [
+            'error' => $e->getMessage(),
+            'roomToken' => $roomToken,
+            'isGroup' => $isGroupBool,
+            'onboardingDone' => $onboardingDoneBool
+        ]);
+        http_response_code(500);
+        exit('Database error creating room config.');
+    }
     $roomConfig = [
         'room_token' => $roomToken, 
-        'is_group' => $isGroup, 
+        'is_group' => $isGroupBool, 
         'mention_mode' => 'on_mention', 
-        'onboarding_done' => false, 
+        'onboarding_done' => $onboardingDoneBool, 
         'meta' => $meta
     ];
 } else {
