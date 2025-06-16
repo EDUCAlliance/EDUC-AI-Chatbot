@@ -1,0 +1,23 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Block access to sensitive directories and files
+    RedirectMatch 403 (?i)/(\.git|vendor|node_modules|uploads|logs|tests)/
+    RedirectMatch 403 (?i)/(composer\.json|composer\.lock|package\.json|phpunit\.xml|README\.md)$
+    RedirectMatch 403 (?i)/(\.env|\.log|auto-include\.php|custom-env\.php)$
+
+    # Route all requests for the admin panel to its front-controller
+    RewriteCond %{REQUEST_URI} ^/admin [NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^admin/(.*)$ admin/index.php [QSA,L]
+
+</IfModule>
+
+# Basic security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule> 
