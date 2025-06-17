@@ -31,6 +31,9 @@ $twig = Twig::create(__DIR__ . '/templates', ['cache' => false]);
 Session::start();
 $twig->getEnvironment()->addGlobal('session', $_SESSION['nextcloud_bot_session'] ?? []);
 
+// Make app directory available to all templates for proper asset paths
+$twig->getEnvironment()->addGlobal('app_directory', getenv('APP_DIRECTORY') ?: 'educ-ai-chatbot');
+
 // The `url_for` function in Twig needs the RouteParser, which TwigMiddleware adds to the container
 $app->add(TwigMiddleware::create($app, $twig));
 
