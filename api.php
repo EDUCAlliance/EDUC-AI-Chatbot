@@ -95,26 +95,85 @@ if (empty($message) || empty($roomToken) || empty($userId) || empty($callbackUrl
 // --- Multi-Bot Detection & Room Association ---
 $detectedBot = null;
 $currentBotId = null;
+
 $roomConfigStmt = $db->prepare("SELECT bot_id, mention_mode, onboarding_done FROM bot_room_config WHERE room_token = ?");
 $roomConfigStmt->execute([$roomToken]);
 $roomConfigInfo = $roomConfigStmt->fetch();
+
 if ($roomConfigInfo && $roomConfigInfo['bot_id']) {
     $currentBotId = $roomConfigInfo['bot_id'];
     $botStmt = $db->prepare("SELECT * FROM bots WHERE id = ?");
     $botStmt->execute([$currentBotId]);
     $detectedBot = $botStmt->fetch();
+
+    if ($detectedBot) {
+        $logger->info('Room has assigned bot', ['room_token' => $roomToken, 'bot_id' => $currentBotId]);
+        $allBotsStmt = $db->query("SELECT mention_name FROM bots WHERE id != {$currentBotId}");
+        $otherBots = $allBotsStmt->fetchAll();
+
+        foreach ($otherBots as $otherBot) {
+            $otherMentionName = ltrim($otherBot['mention_name'], '@');
+            if (stripos($message, '@' . $otherMentionName) !== false) {
+                $logger->info('User trying to mention different bot', ['assigned_bot' => $detectedBot['mention_name'], 'mentioned_bot' => $otherBot['mention_name']]);
+                $switchBotMessage = "In this chat-room the EDUC AI is assigned to the {$detectedBot['mention_name']} bot. To use a different bot, please restart this chat room with the reset command: ((RESET))";
+                sendApiReply($switchBotMessage, $callbackUrl, $messageId, $logger);
+                exit;
+            }
+        }
+
+        $mentionName = ltrim($detectedBot['mention_name'], '@');
+        $shouldCheckMention = $roomConfigInfo['onboarding_done'] && ($roomConfigInfo['mention_mode'] ?? 'on_mention') === 'on_mention';
+
+        if ($shouldCheckMention && stripos($message, '@' . $mentionName) === false) {
+            $logger->info('Assigned bot not mentioned, ignoring message', ['message' => $message, 'required_mention' => $detectedBot['mention_name']]);
+            http_response_code(200);
+            exit('Bot not mentioned.');
+        }
+    }
 } else {
     $botsStmt = $db->query("SELECT * FROM bots ORDER BY created_at ASC");
     $allBots = $botsStmt->fetchAll();
-    if (!empty($allBots)) {
+
+    foreach ($allBots as $bot) {
+        $mentionName = ltrim($bot['mention_name'], '@');
+        if (stripos($message, '@' . $mentionName) !== false) {
+            $detectedBot = $bot;
+            $currentBotId = $bot['id'];
+            $logger->info('New room - bot detected by mention', ['bot_id' => $currentBotId, 'bot_name' => $bot['bot_name']]);
+            break;
+        }
+    }
+    
+    if (!$detectedBot && !empty($allBots)) {
         $detectedBot = $allBots[0];
         $currentBotId = $detectedBot['id'];
+        $logger->info('New room - no mention detected, assigning oldest bot', ['bot_id' => $currentBotId, 'bot_name' => $detectedBot['bot_name']]);
     }
 }
+
 if (!$detectedBot) {
     $logger->error('No bot found for processing.');
     http_response_code(500);
     exit('No bot found.');
+}
+
+// --- Special RESET command ---
+if (stripos($message, '((RESET))') !== false) {
+    $logger->info('Reset command detected', ['roomToken' => $roomToken, 'userId' => $userId]);
+    try {
+        $stmtDelConfig = $db->prepare("DELETE FROM bot_room_config WHERE room_token = ?");
+        $stmtDelConfig->execute([$roomToken]);
+        $stmtDelConvo = $db->prepare("DELETE FROM bot_conversations WHERE room_token = ?");
+        $stmtDelConvo->execute([$roomToken]);
+        $logger->info('Room reset completed', ['roomToken' => $roomToken]);
+        $resetMessage = "🔄 Bot has been reset for this room! I've cleared my memory and configuration. Send me a message to start fresh onboarding.";
+        sendApiReply($resetMessage, $callbackUrl, $messageId, $logger);
+    } catch (\PDOException $e) {
+        $logger->error('Failed to reset room', ['error' => $e->getMessage(), 'roomToken' => $roomToken]);
+        $errorMessage = "❌ Sorry, I couldn't reset the room due to a database error.";
+        sendApiReply($errorMessage, $callbackUrl, $messageId, $logger);
+    }
+    exit;
 }
 
 // --- 3. Room Configuration & Onboarding ---
@@ -126,6 +185,7 @@ try {
     $logger->error('Failed to fetch room config', ['error' => $e->getMessage(), 'roomToken' => $roomToken]);
     $roomConfig = false;
 }
+
 if (!$roomConfig) {
     $meta = ['stage' => 0, 'answers' => []];
     $isGroupBool = true;
@@ -140,54 +200,95 @@ if (!$roomConfig) {
         $stmt->bindValue(6, $currentBotId, \PDO::PARAM_INT);
         $stmt->execute();
     } catch (\PDOException $e) {
-        $logger->error('Failed to create room config', [
-            'error' => $e->getMessage(),
-            'roomToken' => $roomToken,
-            'isGroup' => $isGroupBool,
-            'onboardingDone' => $onboardingDoneBool,
-            'botId' => $currentBotId
-        ]);
+        $logger->error('Failed to create room config', ['error' => $e->getMessage(), 'roomToken' => $roomToken]);
         http_response_code(500);
         exit('Database error creating room config.');
     }
     $roomConfig = [
-        'room_token' => $roomToken,
-        'is_group' => $isGroupBool,
-        'mention_mode' => 'on_mention',
-        'onboarding_done' => $onboardingDoneBool,
-        'meta' => $meta,
-        'bot_id' => $currentBotId
+        'room_token' => $roomToken, 'is_group' => $isGroupBool, 'mention_mode' => 'on_mention',
+        'onboarding_done' => $onboardingDoneBool, 'meta' => $meta, 'bot_id' => $currentBotId
     ];
 } else {
     $roomConfig['meta'] = json_decode($roomConfig['meta'], true);
 }
 
 if ($roomConfig['onboarding_done'] == false) {
-    $logger->info('Onboarding process started/continued.', [
-        'roomToken' => $roomToken,
-        'stage' => $roomConfig['meta']['stage'] ?? 0
-    ]);
+    $logger->info('Processing onboarding for room', ['roomToken' => $roomToken, 'message' => $message]);
 
-    $stageBeforeProcessing = $roomConfig['meta']['stage'] ?? 0;
-
-    // Process the user's message as an answer to the current onboarding question.
-    // The $onboardingManager updates the room config state internally.
-    $wasValid = $onboardingManager->processAnswer($roomConfig, $message);
-
-    // Get the next question based on the (potentially updated) state.
-    // This method also handles marking the onboarding as complete.
-    $nextQuestionData = $onboardingManager->getNextQuestion($roomConfig, $detectedBot);
-    $replyText = $nextQuestionData['question'];
-
-    // If the user provided an invalid answer for any question beyond the first one, give feedback.
-    // For the very first question (stage 0), we don't show an error for invalid input,
-    // we just repeat the question.
-    if (!$wasValid && $stageBeforeProcessing > 0) {
-        $replyText = "Sorry, I didn't understand that. Let's try again.\n\n" . $replyText;
+    if (($roomConfig['is_group'] ?? true) === false) {
+        $reuseState = $roomConfig['meta']['reuse_state'] ?? null;
+        if ($reuseState === 'pending') {
+            $answer = strtolower(trim($message));
+            if (in_array($answer, ['use', 'yes', 'y'])) {
+                $reuseData = $roomConfig['meta']['reuse_data'] ?? [];
+                $roomConfig['mention_mode'] = $reuseData['mention_mode'] ?? $roomConfig['mention_mode'];
+                $roomConfig['meta']['answers'] = $reuseData['answers'] ?? [];
+                $roomConfig['meta']['reuse_state'] = 'accepted';
+                $roomConfig['onboarding_done'] = true;
+                $stmt = $db->prepare("UPDATE bot_room_config SET mention_mode = :mode, meta = :meta, onboarding_done = TRUE WHERE room_token = :token");
+                $stmt->execute([':mode' => $roomConfig['mention_mode'], ':meta' => json_encode($roomConfig['meta']), ':token' => $roomConfig['room_token']]);
+                $replyText = "✅ Previous onboarding answers applied. I'm ready to help you now!";
+                sendApiReply($replyText, $callbackUrl, $messageId, $logger);
+                exit;
+            } elseif (in_array($answer, ['reset', 'no', 'n'])) {
+                $roomConfig['meta']['reuse_state'] = 'declined';
+                unset($roomConfig['meta']['reuse_data']);
+                $stmt = $db->prepare("UPDATE bot_room_config SET meta = :meta WHERE room_token = :token");
+                $stmt->execute([':meta' => json_encode($roomConfig['meta']), ':token' => $roomConfig['room_token']]);
+            } else {
+                sendApiReply("Please reply with 'use' to reuse your previous settings or 'reset' to start over.", $callbackUrl, $messageId, $logger);
+                exit;
+            }
+        }
     }
 
-    sendApiReply($replyText, $callbackUrl, $messageId, $logger);
-    exit();
+    $stageBeforeProcessing = $roomConfig['meta']['stage'] ?? 0;
+    if ($stageBeforeProcessing === 0 && ($roomConfig['meta']['first_question_asked'] ?? false) === false) {
+        $nextStep = $onboardingManager->getNextQuestion($roomConfig, $detectedBot);
+        $roomConfig['meta']['first_question_asked'] = true;
+        $stmtUpdateMeta = $db->prepare("UPDATE bot_room_config SET meta = :meta WHERE room_token = :token");
+        $stmtUpdateMeta->execute([':meta' => json_encode($roomConfig['meta']), ':token' => $roomConfig['room_token']]);
+        sendApiReply($nextStep['question'], $callbackUrl, $messageId, $logger);
+        exit;
+    }
+
+    $answerValid = $onboardingManager->processAnswer($roomConfig, $message);
+
+    if (!$answerValid) {
+        $currentStage = $roomConfig['meta']['stage'] ?? 0;
+        $helpMessage = '';
+        switch ($currentStage) {
+            case 0: $helpMessage = "I didn't understand. Please reply with 'group' or 'dm'."; break;
+            case 1: $helpMessage = "I didn't understand. Please reply with 'always' or 'on_mention'."; break;
+            default: $helpMessage = "Please provide an answer to continue."; break;
+        }
+        sendApiReply($helpMessage, $callbackUrl, $messageId, $logger);
+        exit;
+    }
+
+    if (($roomConfig['is_group'] ?? true) === false && $roomConfig['meta']['stage'] === 1 && !isset($roomConfig['meta']['reuse_state'])) {
+        try {
+            $sql = "SELECT brc.* FROM bot_room_config brc JOIN bot_conversations bc ON bc.room_token = brc.room_token AND bc.user_id = ? WHERE brc.is_group = FALSE AND brc.onboarding_done = TRUE ORDER BY brc.updated_at DESC LIMIT 1";
+            $stmt = $db->prepare($sql);
+            $stmt->execute([$userId]);
+            if ($prevConfig = $stmt->fetch()) {
+                $prevMeta = json_decode($prevConfig['meta'], true);
+                $roomConfig['meta']['reuse_state'] = 'pending';
+                $roomConfig['meta']['reuse_data'] = ['mention_mode' => $prevConfig['mention_mode'], 'answers' => $prevMeta['answers'] ?? []];
+                $stmt2 = $db->prepare("UPDATE bot_room_config SET meta = :meta WHERE room_token = :token");
+                $stmt2->execute([':meta' => json_encode($roomConfig['meta']), ':token' => $roomConfig['room_token']]);
+                $reuseQuestion = "I found previous onboarding answers for you. Reply 'use' to reuse them or 'reset' to start fresh.";
+                sendApiReply($reuseQuestion, $callbackUrl, $messageId, $logger);
+                exit;
+            }
+        } catch (\Throwable $e) {
+            $logger->error('Failed to search for previous user config', ['error' => $e->getMessage(), 'user' => $userId]);
+        }
+    }
+
+    $nextStep = $onboardingManager->getNextQuestion($roomConfig, $detectedBot);
+    sendApiReply($nextStep['question'], $callbackUrl, $messageId, $logger);
+    exit;
 }
 
 // --- 4. Process Regular Message ---
