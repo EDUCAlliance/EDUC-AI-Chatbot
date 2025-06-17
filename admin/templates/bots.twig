@@ -114,36 +114,73 @@
                 </table>
             </div>
         {% else %}
-            <div class="notification is-info is-light">
-                <div class="level">
-                    <div class="level-left">
-                        <div class="level-item">
-                            <span class="icon">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10"/>
-                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-                                    <line x1="12" x2="12.01" y1="17" y2="17"/>
+            <div class="notification is-info">
+                <h4 class="title is-4">🤖 Welcome to Multi-Bot Management</h4>
+                <div class="content">
+                    <p class="is-size-5 mb-4">You haven't created any AI bots yet. Each bot can have its own personality, knowledge base, and behavior.</p>
+                    
+                    <h5 class="title is-5 mt-5 mb-3">
+                        <span class="icon-text">
+                            <span class="icon has-text-primary">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
                                 </svg>
                             </span>
-                            <div class="ml-3">
-                                <p class="has-text-weight-semibold">No bots configured yet</p>
-                                <p>Create your first bot to get started with AI conversations.</p>
+                            <span>Key Features</span>
+                        </span>
+                    </h5>
+                    
+                    <div class="columns">
+                        <div class="column">
+                            <div class="notification is-primary is-light">
+                                <h6 class="title is-6">🎯 Unique Identities</h6>
+                                <p>Each bot has its own mention name like <code>@support</code>, <code>@teacher</code>, or <code>@assistant</code></p>
+                            </div>
+                        </div>
+                        <div class="column">
+                            <div class="notification is-success is-light">
+                                <h6 class="title is-6">🧠 Custom Personalities</h6>
+                                <p>Different system prompts, AI models, and behavior settings for each bot's role</p>
+                            </div>
+                        </div>
+                        <div class="column">
+                            <div class="notification is-warning is-light">
+                                <h6 class="title is-6">📚 Specialized Knowledge</h6>
+                                <p>Separate document libraries and RAG settings for domain-specific expertise</p>
                             </div>
                         </div>
                     </div>
-                    <div class="level-right">
-                        <div class="level-item">
-                            <a href="{{ url_for('bot-create') }}" class="button is-info">
-                                <span class="icon">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="12" y1="5" x2="12" y2="19"/>
-                                        <line x1="5" y1="12" x2="19" y2="12"/>
-                                    </svg>
-                                </span>
-                                <span>Create First Bot</span>
-                            </a>
-                        </div>
+                    
+                    <h5 class="title is-5 mt-5 mb-3">
+                        <span class="icon-text">
+                            <span class="icon has-text-success">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                                </svg>
+                            </span>
+                            <span>Example Use Cases</span>
+                        </span>
+                    </h5>
+                    
+                    <div class="content">
+                        <ul>
+                            <li><strong>@supportbot</strong> - Customer service with FAQ documents and helpful responses</li>
+                            <li><strong>@teacher</strong> - Educational assistant with course materials and learning resources</li>
+                            <li><strong>@codehelper</strong> - Programming assistant with technical documentation</li>
+                            <li><strong>@hrbot</strong> - HR assistant with company policies and onboarding guides</li>
+                        </ul>
                     </div>
+                </div>
+                
+                <div class="mt-5">
+                    <a href="{{ url_for('bot-create') }}" class="button is-primary is-large">
+                        <span class="icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+                            </svg>
+                        </span>
+                        <span>Create Your First Bot</span>
+                    </a>
                 </div>
             </div>
         {% endif %}

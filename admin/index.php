@@ -872,72 +872,28 @@ $app->post('/documents/delete', function (Request $request, Response $response) 
     }
 })->setName('documents-delete')->add($authMiddleware);
 
-$app->get('/models', function (Request $request, Response $response) use ($twig, $db, $apiClient) {
-    $apiModels = $apiClient->getModels();
-    $settings = $db->query("SELECT default_model FROM bot_settings WHERE id = 1")->fetch();
-    return $twig->render($response, 'models.twig', ['models' => $apiModels['data'] ?? [], 'current_model' => $settings['default_model'] ?? '', 'currentPage' => 'models']);
+// Legacy routes - kept for backward compatibility but deprecated
+// These are no longer accessible from the main navigation
+// All configuration is now done through the bot-specific settings pages
+
+$app->get('/models', function (Request $request, Response $response) use ($app) {
+    // Redirect to bots management page
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('bots'))->withStatus(302);
 })->setName('models')->add($authMiddleware);
 
-$app->post('/models', function (Request $request, Response $response) use ($db, $app) {
-    $model = $request->getParsedBody()['model'] ?? '';
-    $stmt = $db->prepare("UPDATE bot_settings SET default_model = ? WHERE id = 1");
-    $stmt->execute([$model]);
-    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('models'))->withStatus(302);
-})->setName('models-update')->add($authMiddleware);
-
-$app->map(['GET', 'POST'], '/prompt', function (Request $request, Response $response) use ($twig, $db, $app) {
-    if ($request->getMethod() === 'POST') {
-        $prompt = $request->getParsedBody()['system_prompt'] ?? '';
-        $stmt = $db->prepare("UPDATE bot_settings SET system_prompt = ? WHERE id = 1");
-        $stmt->execute([$prompt]);
-        return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('prompt'))->withStatus(302);
-    }
-    $settings = $db->query("SELECT system_prompt FROM bot_settings WHERE id = 1")->fetch();
-    return $twig->render($response, 'prompt.twig', ['system_prompt' => $settings['system_prompt'] ?? '', 'currentPage' => 'prompt']);
+$app->get('/prompt', function (Request $request, Response $response) use ($app) {
+    // Redirect to bots management page
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('bots'))->withStatus(302);
 })->setName('prompt')->add($authMiddleware);
 
-$app->map(['GET', 'POST'], '/onboarding', function (Request $request, Response $response) use ($twig, $db, $app) {
-    if ($request->getMethod() === 'POST') {
-        $botMention = trim($request->getParsedBody()['bot_mention'] ?? '@educai');
-        $groupQuestions = $request->getParsedBody()['group_questions'] ?? '';
-        $dmQuestions = $request->getParsedBody()['dm_questions'] ?? '';
-        
-        // Ensure mention starts with @
-        if (!str_starts_with($botMention, '@')) {
-            $botMention = '@' . $botMention;
-        }
-        
-        $groupJson = json_encode(array_filter(array_map('trim', explode("\n", $groupQuestions))));
-        $dmJson = json_encode(array_filter(array_map('trim', explode("\n", $dmQuestions))));
-        
-        // Update bot mention and onboarding questions
-        $stmt = $db->prepare("UPDATE bot_settings SET mention_name = ?, onboarding_group_questions = ?, onboarding_dm_questions = ? WHERE id = 1");
-        $stmt->execute([$botMention, $groupJson, $dmJson]);
-        return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('onboarding'))->withStatus(302);
-    }
-    
-    // Get current settings
-    $settings = $db->query("SELECT mention_name, onboarding_group_questions, onboarding_dm_questions FROM bot_settings WHERE id = 1")->fetch();
-    
-    return $twig->render($response, 'onboarding.twig', [
-        'bot_mention' => $settings['mention_name'] ?? '@educai',
-        'group_questions' => implode("\n", json_decode($settings['onboarding_group_questions'] ?? '[]', true)), 
-        'dm_questions' => implode("\n", json_decode($settings['onboarding_dm_questions'] ?? '[]', true)), 
-        'currentPage' => 'onboarding'
-    ]);
+$app->get('/onboarding', function (Request $request, Response $response) use ($app) {
+    // Redirect to bots management page
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('bots'))->withStatus(302);
 })->setName('onboarding')->add($authMiddleware);
 
-$app->map(['GET', 'POST'], '/rag-settings', function (Request $request, Response $response) use ($twig, $db, $app, $apiClient) {
-    if ($request->getMethod() === 'POST') {
-        $body = $request->getParsedBody();
-        $stmt = $db->prepare("UPDATE bot_settings SET embedding_model = ?, rag_top_k = ?, rag_chunk_size = ?, rag_chunk_overlap = ? WHERE id = 1");
-        $stmt->execute([$body['embedding_model'] ?? 'e5-mistral-7b-instruct', (int)($body['rag_top_k'] ?? 3), (int)($body['rag_chunk_size'] ?? 250), (int)($body['rag_chunk_overlap'] ?? 25)]);
-        return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('rag-settings'))->withStatus(302);
-    }
-    $models = $apiClient->getModels()['data'] ?? [];
-    $embeddingModels = array_filter($models, fn($m) => strpos($m['id'], 'e5') !== false || strpos($m['id'], 'embed') !== false);
-    $settings = $db->query("SELECT * FROM bot_settings WHERE id = 1")->fetch();
-    return $twig->render($response, 'rag_settings.twig', ['settings' => $settings, 'embeddingModels' => $embeddingModels, 'currentPage' => 'rag-settings']);
+$app->get('/rag-settings', function (Request $request, Response $response) use ($app) {
+    // Redirect to bots management page
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('bots'))->withStatus(302);
 })->setName('rag-settings')->add($authMiddleware);
 
 // Helper function to read log entries
