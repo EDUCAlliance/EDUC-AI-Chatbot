@@ -550,8 +550,8 @@ if ($roomConfigForPrompt) {
     }
 }
 
-// Prepare history for embedding (last 5 messages)
-$historyForEmbedding = array_slice($history, -5);
+// Prepare history for embedding (last 2 messages)
+$historyForEmbedding = array_slice($history, -2);
 $historyTextForEmbedding = '';
 if (!empty($historyForEmbedding)) {
     $historyLines = [];
