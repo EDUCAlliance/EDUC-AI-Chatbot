@@ -187,7 +187,17 @@ class DocumentUploader {
 
         // Get bot_id from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
-        const botId = urlParams.get('bot_id');
+        let botId = urlParams.get('bot_id');
+        
+        // Fallback: try to get bot_id from the bot selector dropdown
+        if (!botId) {
+            const botSelector = document.getElementById('botSelector');
+            if (botSelector && botSelector.value) {
+                botId = botSelector.value;
+                // Update URL to include bot_id for consistency
+                window.history.replaceState({}, '', `${window.location.pathname}?bot_id=${botId}`);
+            }
+        }
         
         if (!botId) {
             this.showError('No bot selected. Please select a bot first.');
@@ -203,6 +213,8 @@ class DocumentUploader {
         formData.append('document', file);
         formData.append('bot_id', botId);
 
+        console.log('Starting upload with bot_id:', botId, 'file:', file.name);
+
         this.currentXHR = new XMLHttpRequest();
 
         // Upload progress
@@ -215,6 +227,9 @@ class DocumentUploader {
 
         // Upload complete
         this.currentXHR.addEventListener('load', () => {
+            console.log('Upload completed with status:', this.currentXHR.status);
+            console.log('Response text:', this.currentXHR.responseText);
+            
             if (this.currentXHR.status === 200) {
                 try {
                     const response = JSON.parse(this.currentXHR.responseText);
@@ -227,11 +242,17 @@ class DocumentUploader {
                         this.setUploadState(false);
                     }
                 } catch (e) {
-                    this.showError('Invalid server response');
+                    console.error('Parse error:', e);
+                    this.showError('Invalid server response: ' + this.currentXHR.responseText);
                     this.setUploadState(false);
                 }
             } else {
-                this.showError('Upload failed with status: ' + this.currentXHR.status);
+                try {
+                    const errorResponse = JSON.parse(this.currentXHR.responseText);
+                    this.showError(errorResponse.error || 'Upload failed with status: ' + this.currentXHR.status);
+                } catch (e) {
+                    this.showError('Upload failed with status: ' + this.currentXHR.status + '. Response: ' + this.currentXHR.responseText);
+                }
                 this.setUploadState(false);
             }
         });
@@ -239,6 +260,12 @@ class DocumentUploader {
         // Upload error
         this.currentXHR.addEventListener('error', () => {
             this.showError('Upload failed due to network error');
+            this.setUploadState(false);
+        });
+
+        // Upload abort
+        this.currentXHR.addEventListener('abort', () => {
+            this.showError('Upload was cancelled');
             this.setUploadState(false);
         });
 

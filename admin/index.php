@@ -445,7 +445,7 @@ $app->post('/bots/{id}/delete', function (Request $request, Response $response, 
     return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('bots'))->withStatus(302);
 })->setName('bot-delete')->add($authMiddleware);
 
-$app->get('/documents', function (Request $request, Response $response) use ($twig, $db) {
+$app->get('/documents', function (Request $request, Response $response) use ($twig, $db, $app) {
     $botId = $request->getQueryParams()['bot_id'] ?? null;
     $bots = $db->query("SELECT id, bot_name, mention_name FROM bots ORDER BY bot_name")->fetchAll();
     
@@ -461,11 +461,9 @@ $app->get('/documents', function (Request $request, Response $response) use ($tw
         $botStmt->execute([$botId]);
         $selectedBot = $botStmt->fetch();
     } elseif (!empty($bots)) {
-        // Default to first bot if none selected
-        $selectedBot = $bots[0];
-        $stmt = $db->prepare("SELECT id, filename, created_at FROM bot_docs WHERE bot_id = ? ORDER BY created_at DESC");
-        $stmt->execute([$selectedBot['id']]);
-        $docs = $stmt->fetchAll();
+        // Default to first bot if none selected and redirect with bot_id parameter
+        $firstBot = $bots[0];
+        return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('documents') . '?bot_id=' . $firstBot['id'])->withStatus(302);
     }
     
     return $twig->render($response, 'documents.twig', [
@@ -511,8 +509,22 @@ $app->post('/documents/upload', function (Request $request, Response $response) 
 // Async upload endpoint
 $app->post('/documents/upload-async', function (Request $request, Response $response) use ($db, $logger) {
     try {
-        $uploadedFile = $request->getUploadedFiles()['document'];
-        $botId = $request->getParsedBody()['bot_id'] ?? null;
+        $uploadedFiles = $request->getUploadedFiles();
+        $uploadedFile = $uploadedFiles['document'] ?? null;
+        
+        if (!$uploadedFile) {
+            throw new \Exception('No file uploaded');
+        }
+        
+        // Get bot_id from form data
+        $parsedBody = $request->getParsedBody();
+        $botId = $parsedBody['bot_id'] ?? null;
+        
+        $logger->info('Upload request received', [
+            'bot_id' => $botId,
+            'filename' => $uploadedFile->getClientFilename(),
+            'upload_error' => $uploadedFile->getError()
+        ]);
         
         if (!$botId) {
             throw new \Exception('Bot ID is required');
