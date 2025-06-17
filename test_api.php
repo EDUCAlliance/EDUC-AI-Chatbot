@@ -24,6 +24,7 @@ if (file_exists($lastReplyFile)) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' *; img-src 'self' data:;">
     <title>EDUC AI TalkBot API Tester</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 2em; }
