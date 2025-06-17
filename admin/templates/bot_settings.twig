@@ -1,0 +1,412 @@
+{% extends "layout.twig" %}
+
+{% block title %}{{ bot.bot_name }} Settings{% endblock %}
+
+{% block heading %}{{ bot.bot_name }} Settings{% endblock %}
+
+{% block content %}
+    <div class="box">
+        <div class="level mb-5">
+            <div class="level-left">
+                <div class="level-item">
+                    <div>
+                        <h2 class="subtitle has-text-weight-semibold mb-2">
+                            <span class="icon-text">
+                                <span class="icon has-text-primary">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                        <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    </svg>
+                                </span>
+                                <span>Bot Configuration</span>
+                            </span>
+                        </h2>
+                        <p class="has-text-grey">Configure {{ bot.bot_name }} ({{ bot.mention_name }}) personality, behavior, and knowledge base.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="level-right">
+                <div class="level-item">
+                    <a href="{{ url_for('bots') }}" class="button is-light">
+                        <span class="icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="15,18 9,12 15,6"/>
+                            </svg>
+                        </span>
+                        <span>Back to Bots</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <form action="{{ url_for('bot-settings-update', {'id': bot.id}) }}" method="post" id="settingsForm">
+            <!-- Tabs -->
+            <div class="tabs is-medium">
+                <ul>
+                    <li class="is-active" data-tab="general">
+                        <a>
+                            <span class="icon is-small">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="3"/>
+                                    <path d="M12 1v6m0 6v6"/>
+                                    <path d="m21 12-6 0m-6 0-6 0"/>
+                                </svg>
+                            </span>
+                            <span>General</span>
+                        </a>
+                    </li>
+                    <li data-tab="prompt">
+                        <a>
+                            <span class="icon is-small">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14,2 14,8 20,8"/>
+                                    <line x1="16" x2="8" y1="13" y2="13"/>
+                                    <line x1="16" x2="8" y1="17" y2="17"/>
+                                    <polyline points="10,9 9,9 8,9"/>
+                                </svg>
+                            </span>
+                            <span>System Prompt</span>
+                        </a>
+                    </li>
+                    <li data-tab="onboarding">
+                        <a>
+                            <span class="icon is-small">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                                </svg>
+                            </span>
+                            <span>Onboarding</span>
+                        </a>
+                    </li>
+                    <li data-tab="rag">
+                        <a>
+                            <span class="icon is-small">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                    <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                </svg>
+                            </span>
+                            <span>RAG Settings</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="tab-content">
+                <!-- General Tab -->
+                <div class="tab-pane is-active" id="general">
+                    <div class="columns">
+                        <div class="column is-half">
+                            <div class="field">
+                                <label class="label">Bot Name</label>
+                                <div class="control">
+                                    <input class="input is-medium" type="text" name="bot_name" value="{{ bot.bot_name }}" required>
+                                </div>
+                                <p class="help">Display name for this bot in the admin interface.</p>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">Mention Name</label>
+                                <div class="control has-icons-left">
+                                    <input class="input is-medium" type="text" name="mention_name" value="{{ bot.mention_name }}" required>
+                                    <span class="icon is-small is-left">
+                                        <span class="has-text-grey">@</span>
+                                    </span>
+                                </div>
+                                <p class="help">How users will mention this bot in Nextcloud Talk.</p>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">Chat Model</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth is-medium">
+                                        <select name="default_model">
+                                            {% for model in models %}
+                                                <option value="{{ model.id }}" {{ model.id == bot.default_model ? 'selected' : '' }}>
+                                                    {{ model.id }}
+                                                </option>
+                                            {% else %}
+                                                <option value="meta-llama-3.1-8b-instruct" selected>meta-llama-3.1-8b-instruct (default)</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <p class="help">AI model used for generating responses.</p>
+                            </div>
+                        </div>
+
+                        <div class="column is-half">
+                            <div class="notification is-info is-light">
+                                <h5 class="title is-6">General Settings</h5>
+                                <div class="content is-small">
+                                    <ul>
+                                        <li><strong>Bot Name:</strong> Only visible in admin interface</li>
+                                        <li><strong>Mention Name:</strong> Must be unique across all bots</li>
+                                        <li><strong>Chat Model:</strong> Affects response quality and speed</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Prompt Tab -->
+                <div class="tab-pane" id="prompt">
+                    <div class="field">
+                        <label class="label">System Instructions</label>
+                        <div class="control">
+                            <textarea class="textarea is-medium" name="system_prompt" rows="12" 
+                                      placeholder="You are a helpful assistant...">{{ bot.system_prompt }}</textarea>
+                        </div>
+                        <p class="help">Define this bot's personality, behavior, and response guidelines.</p>
+                    </div>
+
+                    <div class="notification is-info is-light">
+                        <h5 class="title is-6">System Prompt Tips</h5>
+                        <div class="content is-small">
+                            <ul>
+                                <li><strong>Be specific:</strong> Clearly define the bot's role and expertise</li>
+                                <li><strong>Set tone:</strong> Specify formal, friendly, professional, etc.</li>
+                                <li><strong>Include limitations:</strong> Mention what the bot should not do</li>
+                                <li><strong>Context awareness:</strong> Reference your organization's mission</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Onboarding Tab -->
+                <div class="tab-pane" id="onboarding">
+                    <div class="columns">
+                        <div class="column">
+                            <div class="field">
+                                <label class="label">Group Chat Questions</label>
+                                <div class="control">
+                                    <textarea class="textarea is-medium" name="onboarding_group_questions" rows="8" 
+                                              placeholder="What topics are you interested in?&#10;How can I help your team?">{% if bot.onboarding_group_questions %}{{ bot.onboarding_group_questions|json_decode|join("\n") }}{% endif %}</textarea>
+                                </div>
+                                <p class="help">Questions for new group chat onboarding (one per line).</p>
+                            </div>
+                        </div>
+                        <div class="column">
+                            <div class="field">
+                                <label class="label">Direct Message Questions</label>
+                                <div class="control">
+                                    <textarea class="textarea is-medium" name="onboarding_dm_questions" rows="8" 
+                                              placeholder="What would you like to learn?&#10;How can I assist you?">{% if bot.onboarding_dm_questions %}{{ bot.onboarding_dm_questions|json_decode|join("\n") }}{% endif %}</textarea>
+                                </div>
+                                <p class="help">Questions for new direct message onboarding (one per line).</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="notification is-success is-light">
+                        <h5 class="title is-6">Onboarding Best Practices</h5>
+                        <div class="content is-small">
+                            <div class="columns">
+                                <div class="column">
+                                    <h6 class="title is-6">Effective Questions:</h6>
+                                    <ul>
+                                        <li>Keep questions simple and clear</li>
+                                        <li>Ask about user needs and preferences</li>
+                                        <li>Include examples when helpful</li>
+                                    </ul>
+                                </div>
+                                <div class="column">
+                                    <h6 class="title is-6">Question Flow:</h6>
+                                    <ul>
+                                        <li>Start with general topics</li>
+                                        <li>Progress to specific needs</li>
+                                        <li>End with how the bot can help</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RAG Settings Tab -->
+                <div class="tab-pane" id="rag">
+                    <div class="columns">
+                        <div class="column is-half">
+                            <div class="field">
+                                <label class="label">Embedding Model</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth is-medium">
+                                        <select name="embedding_model">
+                                            {% for model in embeddingModels %}
+                                                <option value="{{ model.id }}" {{ model.id == bot.embedding_model ? 'selected' : '' }}>
+                                                    {{ model.id }}
+                                                </option>
+                                            {% else %}
+                                                <option value="e5-mistral-7b-instruct" selected>e5-mistral-7b-instruct (default)</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <p class="help">Model for creating document embeddings.</p>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">Top-K Results</label>
+                                <div class="control">
+                                    <input class="input is-medium" type="number" name="rag_top_k" 
+                                           value="{{ bot.rag_top_k }}" min="1" max="20" step="1">
+                                </div>
+                                <p class="help">Maximum relevant chunks to retrieve (recommended: 3-5).</p>
+                            </div>
+                        </div>
+
+                        <div class="column is-half">
+                            <div class="field">
+                                <label class="label">Chunk Size (words)</label>
+                                <div class="control">
+                                    <input class="input is-medium" type="number" name="rag_chunk_size" 
+                                           value="{{ bot.rag_chunk_size }}" min="50" max="1000" step="25">
+                                </div>
+                                <p class="help">Target size for text chunks (recommended: 200-300).</p>
+                            </div>
+                            
+                            <div class="field">
+                                <label class="label">Chunk Overlap (words)</label>
+                                <div class="control">
+                                    <input class="input is-medium" type="number" name="rag_chunk_overlap" 
+                                           value="{{ bot.rag_chunk_overlap }}" min="0" max="100" step="5">
+                                </div>
+                                <p class="help">Words that overlap between chunks (recommended: 10-25).</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="notification is-info is-light">
+                        <h5 class="title is-6">RAG Configuration Guide</h5>
+                        <div class="content is-small">
+                            <div class="columns">
+                                <div class="column">
+                                    <h6 class="title is-6">Best Practices:</h6>
+                                    <ul>
+                                        <li><strong>Top-K:</strong> Start with 3-5 for balanced performance</li>
+                                        <li><strong>Chunk Size:</strong> 200-300 words for most documents</li>
+                                        <li><strong>Overlap:</strong> 10-25 words to maintain context</li>
+                                    </ul>
+                                </div>
+                                <div class="column">
+                                    <h6 class="title is-6">Performance Impact:</h6>
+                                    <ul>
+                                        <li><strong>Higher Top-K:</strong> More context but slower responses</li>
+                                        <li><strong>Larger Chunks:</strong> Better context but less precision</li>
+                                        <li><strong>More Overlap:</strong> Better continuity but more storage</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Save Button -->
+            <div class="field mt-5">
+                <div class="control">
+                    <button class="button is-primary is-medium" type="submit" id="saveBtn">
+                        <span class="icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                <polyline points="17,21 17,13 7,13 7,21"/>
+                                <polyline points="7,3 7,8 15,8"/>
+                            </svg>
+                        </span>
+                        <span>Save Settings</span>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('settingsForm');
+            const saveBtn = document.getElementById('saveBtn');
+            const tabs = document.querySelectorAll('.tabs li');
+            const tabPanes = document.querySelectorAll('.tab-pane');
+
+            // Tab switching
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Remove active class from all tabs and panes
+                    tabs.forEach(t => t.classList.remove('is-active'));
+                    tabPanes.forEach(pane => pane.classList.remove('is-active'));
+                    
+                    // Add active class to clicked tab
+                    this.classList.add('is-active');
+                    
+                    // Show corresponding pane
+                    const targetTab = this.dataset.tab;
+                    document.getElementById(targetTab).classList.add('is-active');
+                });
+            });
+
+            // Form submission
+            form.addEventListener('submit', function() {
+                saveBtn.classList.add('is-loading');
+                saveBtn.disabled = true;
+            });
+
+            // Track changes for unsaved warning
+            let hasChanges = false;
+            const inputs = form.querySelectorAll('input, textarea, select');
+            const originalValues = {};
+
+            // Store original values
+            inputs.forEach(input => {
+                originalValues[input.name] = input.value;
+            });
+
+            // Monitor changes
+            inputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    hasChanges = Object.keys(originalValues).some(key => {
+                        const input = form.querySelector(`[name="${key}"]`);
+                        return input && input.value !== originalValues[key];
+                    });
+
+                    if (hasChanges) {
+                        saveBtn.classList.add('is-warning');
+                        saveBtn.innerHTML = '<span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg></span><span>Save Changes</span>';
+                    } else {
+                        saveBtn.classList.remove('is-warning');
+                        saveBtn.innerHTML = '<span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg></span><span>Save Settings</span>';
+                    }
+                });
+            });
+
+            // Warn about unsaved changes
+            window.addEventListener('beforeunload', function(e) {
+                if (hasChanges) {
+                    e.preventDefault();
+                    e.returnValue = '';
+                }
+            });
+        });
+    </script>
+
+    <style>
+        .tab-pane {
+            display: none;
+        }
+        
+        .tab-pane.is-active {
+            display: block;
+        }
+        
+        .tabs li {
+            cursor: pointer;
+        }
+        
+        .tabs li:hover {
+            background-color: #f5f5f5;
+        }
+    </style>
+{% endblock %} 

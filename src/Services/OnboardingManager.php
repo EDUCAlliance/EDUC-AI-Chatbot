@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace NextcloudBot\Services;
 
 use PDO;
+use NextcloudBot\Helpers\Logger;
 
 class OnboardingManager
 {
     private PDO $db;
+    private ?Logger $logger;
 
-    public function __construct(PDO $db)
+    public function __construct(PDO $db, Logger $logger = null)
     {
         $this->db = $db;
+        $this->logger = $logger;
     }
 
     /**

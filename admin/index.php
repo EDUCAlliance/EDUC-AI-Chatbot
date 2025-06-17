@@ -51,6 +51,119 @@ try {
     }
 }
 
+// --- Multi-Bot Migration ---
+function performMultiBotMigration($db, $logger) {
+    try {
+        // Check if migration is needed
+        $botsTableExists = false;
+        try {
+            $db->query("SELECT 1 FROM bots LIMIT 1");
+            $botsTableExists = true;
+        } catch (\PDOException $e) {
+            // Table doesn't exist, proceed with migration
+            $logger->info('Starting multi-bot migration: bots table not found');
+        }
+        
+        if (!$botsTableExists) {
+            $logger->info('Creating bots table and performing migration');
+            
+            // Step 1: Create bots table
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS bots (
+                  id SERIAL PRIMARY KEY,
+                  bot_name TEXT NOT NULL,
+                  mention_name TEXT UNIQUE NOT NULL,
+                  default_model TEXT DEFAULT 'meta-llama-3.1-8b-instruct',
+                  system_prompt TEXT,
+                  onboarding_group_questions JSONB,
+                  onboarding_dm_questions JSONB,
+                  embedding_model TEXT DEFAULT 'e5-mistral-7b-instruct',
+                  rag_top_k INTEGER DEFAULT 3,
+                  rag_chunk_size INTEGER DEFAULT 250,
+                  rag_chunk_overlap INTEGER DEFAULT 25,
+                  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+            
+            // Step 2: Add bot_id columns to existing tables
+            $db->exec("ALTER TABLE bot_docs ADD COLUMN IF NOT EXISTS bot_id INTEGER");
+            $db->exec("ALTER TABLE bot_room_config ADD COLUMN IF NOT EXISTS bot_id INTEGER");
+            $db->exec("ALTER TABLE bot_conversations ADD COLUMN IF NOT EXISTS bot_id INTEGER");
+            
+            // Step 3: Migrate data from bot_settings
+            $settingsStmt = $db->query("SELECT * FROM bot_settings WHERE id = 1");
+            $settings = $settingsStmt->fetch();
+            
+            if ($settings) {
+                // Create default bot from existing settings
+                $stmt = $db->prepare("
+                    INSERT INTO bots (bot_name, mention_name, default_model, system_prompt, 
+                                    onboarding_group_questions, onboarding_dm_questions, 
+                                    embedding_model, rag_top_k, rag_chunk_size, rag_chunk_overlap) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                
+                $stmt->execute([
+                    'Default Bot',
+                    $settings['mention_name'] ?: '@educai',
+                    $settings['default_model'] ?: 'meta-llama-3.1-8b-instruct',
+                    $settings['system_prompt'],
+                    $settings['onboarding_group_questions'],
+                    $settings['onboarding_dm_questions'],
+                    $settings['embedding_model'] ?: 'e5-mistral-7b-instruct',
+                    $settings['rag_top_k'] ?: 3,
+                    $settings['rag_chunk_size'] ?: 250,
+                    $settings['rag_chunk_overlap'] ?: 25
+                ]);
+                
+                $defaultBotId = $db->lastInsertId();
+                $logger->info('Created default bot with ID: ' . $defaultBotId);
+            } else {
+                // Create a minimal default bot if no settings exist
+                $stmt = $db->prepare("
+                    INSERT INTO bots (bot_name, mention_name) VALUES (?, ?)
+                ");
+                $stmt->execute(['Default Bot', '@educai']);
+                $defaultBotId = $db->lastInsertId();
+                $logger->info('Created minimal default bot with ID: ' . $defaultBotId);
+            }
+            
+            // Step 4: Update existing records with bot_id
+            $db->prepare("UPDATE bot_docs SET bot_id = ? WHERE bot_id IS NULL")->execute([$defaultBotId]);
+            $db->prepare("UPDATE bot_room_config SET bot_id = ? WHERE bot_id IS NULL")->execute([$defaultBotId]);
+            $db->prepare("UPDATE bot_conversations SET bot_id = ? WHERE bot_id IS NULL")->execute([$defaultBotId]);
+            
+            // Step 5: Add foreign key constraints
+            try {
+                $db->exec("ALTER TABLE bot_docs ADD CONSTRAINT fk_bot_docs_bot_id FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE");
+            } catch (\PDOException $e) {
+                $logger->warning('Could not add foreign key constraint for bot_docs: ' . $e->getMessage());
+            }
+            
+            try {
+                $db->exec("ALTER TABLE bot_room_config ADD CONSTRAINT fk_bot_room_config_bot_id FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE");
+            } catch (\PDOException $e) {
+                $logger->warning('Could not add foreign key constraint for bot_room_config: ' . $e->getMessage());
+            }
+            
+            try {
+                $db->exec("ALTER TABLE bot_conversations ADD CONSTRAINT fk_bot_conversations_bot_id FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE");
+            } catch (\PDOException $e) {
+                $logger->warning('Could not add foreign key constraint for bot_conversations: ' . $e->getMessage());
+            }
+            
+            $logger->info('Multi-bot migration completed successfully');
+        }
+    } catch (\PDOException $e) {
+        $logger->error('Multi-bot migration failed: ' . $e->getMessage());
+        throw $e;
+    }
+}
+
+// Perform the migration
+performMultiBotMigration($db, $logger);
+
 // Add new columns if they don't exist (for schema migration)
 try {
     $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS mention_name TEXT DEFAULT '@educai'");
@@ -193,6 +306,7 @@ $app->get('/logout', function (Request $request, Response $response) use ($app) 
 
 $app->get('/', function (Request $request, Response $response) use ($twig, $db) {
     $stats = [
+        'bots' => $db->query("SELECT COUNT(*) FROM bots")->fetchColumn(),
         'docs' => $db->query("SELECT COUNT(*) FROM bot_docs")->fetchColumn(),
         'embeddings' => $db->query("SELECT COUNT(*) FROM bot_embeddings")->fetchColumn(),
         'conversations' => $db->query("SELECT COUNT(*) FROM bot_conversations")->fetchColumn(),
@@ -201,13 +315,168 @@ $app->get('/', function (Request $request, Response $response) use ($twig, $db) 
     return $twig->render($response, 'dashboard.twig', ['stats' => $stats, 'currentPage' => 'dashboard']);
 })->setName('dashboard')->add($authMiddleware);
 
+// Bot management routes
+$app->get('/bots', function (Request $request, Response $response) use ($twig, $db) {
+    $bots = $db->query("SELECT * FROM bots ORDER BY created_at DESC")->fetchAll();
+    return $twig->render($response, 'bots.twig', ['bots' => $bots, 'currentPage' => 'bots']);
+})->setName('bots')->add($authMiddleware);
+
+$app->map(['GET', 'POST'], '/bots/create', function (Request $request, Response $response) use ($twig, $db, $app) {
+    if ($request->getMethod() === 'POST') {
+        $data = $request->getParsedBody();
+        $botName = trim($data['bot_name'] ?? '');
+        $mentionName = trim($data['mention_name'] ?? '');
+        
+        // Ensure mention starts with @
+        if (!str_starts_with($mentionName, '@')) {
+            $mentionName = '@' . $mentionName;
+        }
+        
+        if ($botName && $mentionName) {
+            try {
+                $stmt = $db->prepare("INSERT INTO bots (bot_name, mention_name) VALUES (?, ?)");
+                $stmt->execute([$botName, $mentionName]);
+                return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('bots'))->withStatus(302);
+            } catch (\PDOException $e) {
+                $error = 'Failed to create bot: ' . $e->getMessage();
+                return $twig->render($response, 'bot_create.twig', ['error' => $error, 'currentPage' => 'bots']);
+            }
+        } else {
+            $error = 'Bot name and mention name are required';
+            return $twig->render($response, 'bot_create.twig', ['error' => $error, 'currentPage' => 'bots']);
+        }
+    }
+    return $twig->render($response, 'bot_create.twig', ['currentPage' => 'bots']);
+})->setName('bot-create')->add($authMiddleware);
+
+$app->get('/bots/{id}/settings', function (Request $request, Response $response, array $args) use ($twig, $db, $apiClient) {
+    $botId = (int)$args['id'];
+    $bot = $db->prepare("SELECT * FROM bots WHERE id = ?");
+    $bot->execute([$botId]);
+    $botData = $bot->fetch();
+    
+    if (!$botData) {
+        return $response->withStatus(404);
+    }
+    
+    $apiModels = $apiClient->getModels();
+    $models = $apiModels['data'] ?? [];
+    $embeddingModels = array_filter($models, fn($m) => strpos($m['id'], 'e5') !== false || strpos($m['id'], 'embed') !== false);
+    
+    return $twig->render($response, 'bot_settings.twig', [
+        'bot' => $botData, 
+        'models' => $models,
+        'embeddingModels' => $embeddingModels,
+        'currentPage' => 'bots'
+    ]);
+})->setName('bot-settings')->add($authMiddleware);
+
+$app->post('/bots/{id}/settings', function (Request $request, Response $response, array $args) use ($db, $app) {
+    $botId = (int)$args['id'];
+    $data = $request->getParsedBody();
+    
+    $stmt = $db->prepare("
+        UPDATE bots SET 
+            bot_name = ?, 
+            mention_name = ?, 
+            default_model = ?, 
+            system_prompt = ?, 
+            onboarding_group_questions = ?, 
+            onboarding_dm_questions = ?, 
+            embedding_model = ?, 
+            rag_top_k = ?, 
+            rag_chunk_size = ?, 
+            rag_chunk_overlap = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    ");
+    
+    // Ensure mention starts with @
+    $mentionName = trim($data['mention_name'] ?? '');
+    if (!str_starts_with($mentionName, '@')) {
+        $mentionName = '@' . $mentionName;
+    }
+    
+    $groupQuestions = json_encode(array_filter(array_map('trim', explode("\n", $data['onboarding_group_questions'] ?? ''))));
+    $dmQuestions = json_encode(array_filter(array_map('trim', explode("\n", $data['onboarding_dm_questions'] ?? ''))));
+    
+    $stmt->execute([
+        $data['bot_name'] ?? '',
+        $mentionName,
+        $data['default_model'] ?? 'meta-llama-3.1-8b-instruct',
+        $data['system_prompt'] ?? '',
+        $groupQuestions,
+        $dmQuestions,
+        $data['embedding_model'] ?? 'e5-mistral-7b-instruct',
+        (int)($data['rag_top_k'] ?? 3),
+        (int)($data['rag_chunk_size'] ?? 250),
+        (int)($data['rag_chunk_overlap'] ?? 25),
+        $botId
+    ]);
+    
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('bot-settings', ['id' => $botId]))->withStatus(302);
+})->setName('bot-settings-update')->add($authMiddleware);
+
+$app->post('/bots/{id}/delete', function (Request $request, Response $response, array $args) use ($db, $app, $logger) {
+    $botId = (int)$args['id'];
+    
+    try {
+        $db->beginTransaction();
+        
+        // Delete the bot (cascade will handle related records)
+        $stmt = $db->prepare("DELETE FROM bots WHERE id = ?");
+        $stmt->execute([$botId]);
+        
+        $db->commit();
+        $logger->info('Bot deleted successfully', ['bot_id' => $botId]);
+        
+    } catch (\PDOException $e) {
+        $db->rollBack();
+        $logger->error('Failed to delete bot', ['bot_id' => $botId, 'error' => $e->getMessage()]);
+    }
+    
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('bots'))->withStatus(302);
+})->setName('bot-delete')->add($authMiddleware);
+
 $app->get('/documents', function (Request $request, Response $response) use ($twig, $db) {
-    $docs = $db->query("SELECT id, filename, created_at FROM bot_docs ORDER BY created_at DESC")->fetchAll();
-    return $twig->render($response, 'documents.twig', ['docs' => $docs, 'currentPage' => 'documents']);
+    $botId = $request->getQueryParams()['bot_id'] ?? null;
+    $bots = $db->query("SELECT id, bot_name, mention_name FROM bots ORDER BY bot_name")->fetchAll();
+    
+    $docs = [];
+    $selectedBot = null;
+    
+    if ($botId) {
+        $stmt = $db->prepare("SELECT id, filename, created_at FROM bot_docs WHERE bot_id = ? ORDER BY created_at DESC");
+        $stmt->execute([$botId]);
+        $docs = $stmt->fetchAll();
+        
+        $botStmt = $db->prepare("SELECT * FROM bots WHERE id = ?");
+        $botStmt->execute([$botId]);
+        $selectedBot = $botStmt->fetch();
+    } elseif (!empty($bots)) {
+        // Default to first bot if none selected
+        $selectedBot = $bots[0];
+        $stmt = $db->prepare("SELECT id, filename, created_at FROM bot_docs WHERE bot_id = ? ORDER BY created_at DESC");
+        $stmt->execute([$selectedBot['id']]);
+        $docs = $stmt->fetchAll();
+    }
+    
+    return $twig->render($response, 'documents.twig', [
+        'docs' => $docs, 
+        'bots' => $bots,
+        'selectedBot' => $selectedBot,
+        'currentPage' => 'documents'
+    ]);
 })->setName('documents')->add($authMiddleware);
 
 $app->post('/documents/upload', function (Request $request, Response $response) use ($db, $embeddingService, $app) {
     $uploadedFile = $request->getUploadedFiles()['document'];
+    $botId = $request->getParsedBody()['bot_id'] ?? null;
+    
+    if (!$botId) {
+        return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('documents'))->withStatus(302);
+    }
+    
     if ($uploadedFile->getError() === UPLOAD_ERR_OK) {
         $uploadDir = APP_ROOT . '/uploads';
         if (!is_dir($uploadDir)) {
@@ -218,24 +487,29 @@ $app->post('/documents/upload', function (Request $request, Response $response) 
         $uploadedFile->moveTo($targetPath);
         $content = file_get_contents($targetPath);
         $checksum = hash('sha256', $content);
-        $stmt = $db->prepare("SELECT id FROM bot_docs WHERE checksum = ?");
-        $stmt->execute([$checksum]);
+        $stmt = $db->prepare("SELECT id FROM bot_docs WHERE checksum = ? AND bot_id = ?");
+        $stmt->execute([$checksum, $botId]);
         if ($stmt->fetch()) {
             unlink($targetPath);
         } else {
-            $stmt = $db->prepare("INSERT INTO bot_docs (filename, path, checksum) VALUES (?, ?, ?)");
-            $stmt->execute([$basename, $targetPath, $checksum]);
+            $stmt = $db->prepare("INSERT INTO bot_docs (filename, path, checksum, bot_id) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$basename, $targetPath, $checksum, $botId]);
             $docId = $db->lastInsertId();
-            $embeddingService->generateAndStoreEmbeddings((int)$docId, $content);
+            $embeddingService->generateAndStoreEmbeddings((int)$docId, $content, (int)$botId);
         }
     }
-    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('documents'))->withStatus(302);
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('documents') . '?bot_id=' . $botId)->withStatus(302);
 })->setName('documents-upload')->add($authMiddleware);
 
 // Async upload endpoint
 $app->post('/documents/upload-async', function (Request $request, Response $response) use ($db, $logger) {
     try {
         $uploadedFile = $request->getUploadedFiles()['document'];
+        $botId = $request->getParsedBody()['bot_id'] ?? null;
+        
+        if (!$botId) {
+            throw new \Exception('Bot ID is required');
+        }
         
         if ($uploadedFile->getError() !== UPLOAD_ERR_OK) {
             throw new \Exception('File upload error: ' . $uploadedFile->getError());
@@ -253,29 +527,30 @@ $app->post('/documents/upload-async', function (Request $request, Response $resp
         $content = file_get_contents($targetPath);
         $checksum = hash('sha256', $content);
         
-        // Check for duplicates
-        $stmt = $db->prepare("SELECT id FROM bot_docs WHERE checksum = ?");
-        $stmt->execute([$checksum]);
+        // Check for duplicates within the same bot
+        $stmt = $db->prepare("SELECT id FROM bot_docs WHERE checksum = ? AND bot_id = ?");
+        $stmt->execute([$checksum, $botId]);
         if ($existingDoc = $stmt->fetch()) {
             unlink($targetPath);
-            throw new \Exception('Document already exists');
+            throw new \Exception('Document already exists for this bot');
         }
         
         // Insert document record
-        $stmt = $db->prepare("INSERT INTO bot_docs (filename, path, checksum, processing_status) VALUES (?, ?, ?, 'pending')");
-        $stmt->execute([$basename, $targetPath, $checksum]);
+        $stmt = $db->prepare("INSERT INTO bot_docs (filename, path, checksum, bot_id, processing_status) VALUES (?, ?, ?, ?, 'pending')");
+        $stmt->execute([$basename, $targetPath, $checksum, $botId]);
         $docId = $db->lastInsertId();
         
         // Initialize progress tracking
         $stmt = $db->prepare("INSERT INTO bot_processing_progress (doc_id, status, progress, started_at) VALUES (?, 'started', 0, NOW())");
         $stmt->execute([$docId]);
         
-        $logger->info('Document uploaded, starting background processing', ['doc_id' => $docId, 'filename' => $basename]);
+        $logger->info('Document uploaded, starting background processing', ['doc_id' => $docId, 'filename' => $basename, 'bot_id' => $botId]);
         
         $response->getBody()->write(json_encode([
             'success' => true,
             'doc_id' => $docId,
-            'filename' => $basename
+            'filename' => $basename,
+            'bot_id' => $botId
         ]));
         
         return $response->withHeader('Content-Type', 'application/json');
@@ -314,8 +589,14 @@ $app->get('/embedding-progress/{docId}', function (Request $request, Response $r
     }
     
     try {
+        // Get bot_id for the document
+        $docStmt = $db->prepare("SELECT bot_id FROM bot_docs WHERE id = ?");
+        $docStmt->execute([$docId]);
+        $docInfo = $docStmt->fetch();
+        $botId = $docInfo['bot_id'] ?? null;
+        
         // Start processing in background
-        $embeddingService->generateAndStoreEmbeddingsAsync($docId, file_get_contents($doc['path']));
+        $embeddingService->generateAndStoreEmbeddingsAsync($docId, file_get_contents($doc['path']), $botId);
         
         // Stream progress updates
         while (true) {

@@ -48,19 +48,35 @@ class VectorStore
      *
      * @param array $queryEmbedding The vector embedding of the user's query.
      * @param int $limit The maximum number of similar chunks to return.
+     * @param int|null $botId The ID of the bot to filter by. If null, searches all embeddings.
      * @return array An array of the most similar text chunks.
      */
-    public function findSimilar(array $queryEmbedding, int $limit = 5): array
+    public function findSimilar(array $queryEmbedding, int $limit = 5, int $botId = null): array
     {
-        // The <-> operator performs cosine similarity search
-        $sql = "SELECT text
-                FROM bot_embeddings
-                ORDER BY embedding <-> :query
-                LIMIT :limit";
+        if ($botId) {
+            // Bot-specific search
+            $sql = "SELECT be.text
+                    FROM bot_embeddings be
+                    JOIN bot_docs bd ON be.doc_id = bd.id
+                    WHERE bd.bot_id = :bot_id
+                    ORDER BY be.embedding <-> :query
+                    LIMIT :limit";
+        } else {
+            // Legacy search (all embeddings)
+            $sql = "SELECT text
+                    FROM bot_embeddings
+                    ORDER BY embedding <-> :query
+                    LIMIT :limit";
+        }
 
         $stmt = $this->db->prepare($sql);
         $stmt->bindValue(':query', new Vector($queryEmbedding));
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        
+        if ($botId) {
+            $stmt->bindValue(':bot_id', $botId, PDO::PARAM_INT);
+        }
+        
         $stmt->execute();
         
         return $stmt->fetchAll(PDO::FETCH_COLUMN, 0);

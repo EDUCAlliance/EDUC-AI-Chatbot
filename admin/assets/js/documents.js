@@ -185,12 +185,23 @@ class DocumentUploader {
         const file = this.documentInput.files[0];
         if (!file) return;
 
+        // Get bot_id from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const botId = urlParams.get('bot_id');
+        
+        if (!botId) {
+            this.showError('No bot selected. Please select a bot first.');
+            this.setUploadState(false);
+            return;
+        }
+
         this.hideMessages();
         this.showUploadProgress();
         this.setUploadState(true);
 
         const formData = new FormData();
         formData.append('document', file);
+        formData.append('bot_id', botId);
 
         this.currentXHR = new XMLHttpRequest();
 

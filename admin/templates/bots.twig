@@ -1,0 +1,254 @@
+{% extends "layout.twig" %}
+
+{% block title %}Manage Bots{% endblock %}
+
+{% block heading %}Bots{% endblock %}
+
+{% block content %}
+    <div class="box">
+        <div class="level mb-5">
+            <div class="level-left">
+                <div class="level-item">
+                    <div>
+                        <h2 class="subtitle has-text-weight-semibold mb-2">
+                            <span class="icon-text">
+                                <span class="icon has-text-primary">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+                                    </svg>
+                                </span>
+                                <span>AI Chatbots</span>
+                            </span>
+                        </h2>
+                        <p class="has-text-grey">Create and manage multiple AI chatbots with different personalities and knowledge bases.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="level-right">
+                <div class="level-item">
+                    <a href="{{ url_for('bot-create') }}" class="button is-primary">
+                        <span class="icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </span>
+                        <span>Create New Bot</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        {% if bots|length > 0 %}
+            <div class="table-container">
+                <table class="table is-fullwidth is-striped is-hoverable">
+                    <thead>
+                        <tr>
+                            <th>Bot Name</th>
+                            <th>Mention Name</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bot in bots %}
+                        <tr>
+                            <td>
+                                <span class="icon-text">
+                                    <span class="icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+                                        </svg>
+                                    </span>
+                                    <span>{{ bot.bot_name }}</span>
+                                </span>
+                            </td>
+                            <td>
+                                <span class="tag is-info is-light">{{ bot.mention_name }}</span>
+                            </td>
+                            <td>{{ bot.created_at|date('Y-m-d H:i') }}</td>
+                            <td>
+                                <div class="field is-grouped">
+                                    <div class="control">
+                                        <a href="{{ url_for('bot-settings', {'id': bot.id}) }}" class="button is-small is-info">
+                                            <span class="icon">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                                    <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                </svg>
+                                            </span>
+                                            <span>Settings</span>
+                                        </a>
+                                    </div>
+                                    <div class="control">
+                                        <a href="{{ url_for('documents') }}?bot_id={{ bot.id }}" class="button is-small is-link">
+                                            <span class="icon">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                                    <polyline points="14,2 14,8 20,8"/>
+                                                </svg>
+                                            </span>
+                                            <span>Documents</span>
+                                        </a>
+                                    </div>
+                                    {% if bots|length > 1 %}
+                                    <div class="control">
+                                        <button class="button is-small is-danger delete-bot-btn" 
+                                                data-bot-id="{{ bot.id }}" 
+                                                data-bot-name="{{ bot.bot_name }}">
+                                            <span class="icon">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <polyline points="3,6 5,6 21,6"/>
+                                                    <path d="m19,6 v14 a2,2 0 0,1 -2,2 H7 a2,2 0 0,1 -2,-2 V6 m3,0 V4 a2,2 0 0,1 2,-2 h4 a2,2 0 0,1 2,2 v2"/>
+                                                </svg>
+                                            </span>
+                                            <span>Delete</span>
+                                        </button>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="notification is-info is-light">
+                <div class="level">
+                    <div class="level-left">
+                        <div class="level-item">
+                            <span class="icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                                    <line x1="12" x2="12.01" y1="17" y2="17"/>
+                                </svg>
+                            </span>
+                            <div class="ml-3">
+                                <p class="has-text-weight-semibold">No bots configured yet</p>
+                                <p>Create your first bot to get started with AI conversations.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="level-right">
+                        <div class="level-item">
+                            <a href="{{ url_for('bot-create') }}" class="button is-info">
+                                <span class="icon">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="12" y1="5" x2="12" y2="19"/>
+                                        <line x1="5" y1="12" x2="19" y2="12"/>
+                                    </svg>
+                                </span>
+                                <span>Create First Bot</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal" id="deleteModal">
+        <div class="modal-background"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">
+                    <span class="icon-text">
+                        <span class="icon has-text-danger">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                <line x1="12" x2="12" y1="9" y2="13"/>
+                                <line x1="12" x2="12.01" y1="17" y2="17"/>
+                            </svg>
+                        </span>
+                        <span>Delete Bot</span>
+                    </span>
+                </p>
+                <button class="delete" aria-label="close" id="closeDeleteModal"></button>
+            </header>
+            <section class="modal-card-body">
+                <p>Are you sure you want to delete <strong id="deleteBotName"></strong>?</p>
+                <div class="notification is-warning is-light mt-4">
+                    <h6 class="title is-6 has-text-warning">⚠️ This action will also delete:</h6>
+                    <ul>
+                        <li>All documents and embeddings for this bot</li>
+                        <li>All conversation history</li>
+                        <li>All room configurations for this bot</li>
+                    </ul>
+                    <p class="has-text-danger has-text-weight-semibold mt-3">This action cannot be undone.</p>
+                </div>
+            </section>
+            <footer class="modal-card-foot">
+                <form method="post" id="deleteBotForm">
+                    <button class="button is-danger" type="submit">Delete Bot</button>
+                    <button class="button" type="button" id="cancelDelete">Cancel</button>
+                </form>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('deleteModal');
+            const closeModal = document.getElementById('closeDeleteModal');
+            const cancelDelete = document.getElementById('cancelDelete');
+            const deleteBotForm = document.getElementById('deleteBotForm');
+            const deleteBotName = document.getElementById('deleteBotName');
+
+            // Delete bot button handlers
+            document.querySelectorAll('.delete-bot-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const botId = this.dataset.botId;
+                    const botName = this.dataset.botName;
+                    
+                    deleteBotName.textContent = botName;
+                    deleteBotForm.action = `{{ url_for('bot-delete', {'id': '__ID__'}) }}`.replace('__ID__', botId);
+                    
+                    modal.classList.add('is-active');
+                    document.body.classList.add('modal-open');
+                });
+            });
+
+            // Close modal handlers
+            [closeModal, cancelDelete].forEach(element => {
+                element.addEventListener('click', function() {
+                    modal.classList.remove('is-active');
+                    document.body.classList.remove('modal-open');
+                });
+            });
+
+            // Close modal when clicking background
+            modal.querySelector('.modal-background').addEventListener('click', function() {
+                modal.classList.remove('is-active');
+                document.body.classList.remove('modal-open');
+            });
+        });
+    </script>
+
+    <style>
+        .modal {
+            display: none;
+        }
+        
+        .modal.is-active {
+            display: flex;
+        }
+        
+        body.modal-open {
+            overflow: hidden;
+        }
+        
+        .delete-bot-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        
+        .delete-bot-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+    </style>
+{% endblock %} 

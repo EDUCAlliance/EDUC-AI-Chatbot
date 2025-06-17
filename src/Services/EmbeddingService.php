@@ -29,20 +29,30 @@ class EmbeddingService
      *
      * @param int $docId The ID of the document being processed.
      * @param string $content The full text content of the document.
+     * @param int|null $botId The ID of the bot (for multi-bot support). If null, uses legacy bot_settings.
      * @return bool True if all chunks were processed and stored successfully.
      */
-    public function generateAndStoreEmbeddings(int $docId, string $content): bool
+    public function generateAndStoreEmbeddings(int $docId, string $content, int $botId = null): bool
     {
-        $settingsStmt = $this->db->query("SELECT rag_chunk_size, rag_chunk_overlap FROM bot_settings WHERE id = 1");
-        $ragSettings = $settingsStmt->fetch();
+        if ($botId) {
+            $settingsStmt = $this->db->prepare("SELECT rag_chunk_size, rag_chunk_overlap, embedding_model FROM bots WHERE id = ?");
+            $settingsStmt->execute([$botId]);
+            $ragSettings = $settingsStmt->fetch();
+        } else {
+            // Fallback to legacy bot_settings for backwards compatibility
+            $settingsStmt = $this->db->query("SELECT rag_chunk_size, rag_chunk_overlap, embedding_model FROM bot_settings WHERE id = 1");
+            $ragSettings = $settingsStmt->fetch();
+        }
+        
         $chunkSize = $ragSettings['rag_chunk_size'] ?? 250;
         $chunkOverlap = $ragSettings['rag_chunk_overlap'] ?? 25;
+        $embeddingModel = $ragSettings['embedding_model'] ?? 'e5-mistral-7b-instruct';
 
         $chunks = $this->chunkText($content, $chunkSize, $chunkOverlap);
         $success = true;
 
         foreach ($chunks as $index => $chunk) {
-            $embeddingResponse = $this->apiClient->getEmbedding($chunk);
+            $embeddingResponse = $this->apiClient->getEmbedding($chunk, $embeddingModel);
 
             if (isset($embeddingResponse['error']) || empty($embeddingResponse['data'][0]['embedding'])) {
                 $this->logger->error('Failed to get embedding for chunk', [
@@ -74,15 +84,25 @@ class EmbeddingService
      *
      * @param int $docId The ID of the document being processed.
      * @param string $content The full text content of the document.
+     * @param int|null $botId The ID of the bot (for multi-bot support). If null, uses legacy bot_settings.
      * @return bool True if all chunks were processed and stored successfully.
      */
-    public function generateAndStoreEmbeddingsAsync(int $docId, string $content): bool
+    public function generateAndStoreEmbeddingsAsync(int $docId, string $content, int $botId = null): bool
     {
         try {
-            $settingsStmt = $this->db->query("SELECT rag_chunk_size, rag_chunk_overlap FROM bot_settings WHERE id = 1");
-            $ragSettings = $settingsStmt->fetch();
+            if ($botId) {
+                $settingsStmt = $this->db->prepare("SELECT rag_chunk_size, rag_chunk_overlap, embedding_model FROM bots WHERE id = ?");
+                $settingsStmt->execute([$botId]);
+                $ragSettings = $settingsStmt->fetch();
+            } else {
+                // Fallback to legacy bot_settings for backwards compatibility
+                $settingsStmt = $this->db->query("SELECT rag_chunk_size, rag_chunk_overlap, embedding_model FROM bot_settings WHERE id = 1");
+                $ragSettings = $settingsStmt->fetch();
+            }
+            
             $chunkSize = $ragSettings['rag_chunk_size'] ?? 250;
             $chunkOverlap = $ragSettings['rag_chunk_overlap'] ?? 25;
+            $embeddingModel = $ragSettings['embedding_model'] ?? 'e5-mistral-7b-instruct';
 
             $chunks = $this->chunkText($content, $chunkSize, $chunkOverlap);
             $totalChunks = count($chunks);
@@ -102,7 +122,7 @@ class EmbeddingService
                 $progress = (int)(($index / $totalChunks) * 100);
                 $this->updateProgress($docId, $progress, "Processing chunk " . ($index + 1) . " of $totalChunks...", $index + 1, $totalChunks);
                 
-                $embeddingResponse = $this->apiClient->getEmbedding($chunk);
+                $embeddingResponse = $this->apiClient->getEmbedding($chunk, $embeddingModel);
 
                 if (isset($embeddingResponse['error']) || empty($embeddingResponse['data'][0]['embedding'])) {
                     $this->logger->error('Failed to get embedding for chunk', [

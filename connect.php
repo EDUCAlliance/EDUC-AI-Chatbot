@@ -27,7 +27,7 @@ $apiClient = new ApiClient(
 );
 $vectorStore = new VectorStore($db);
 $embeddingService = new EmbeddingService($apiClient, $vectorStore, $logger, $db);
-$onboardingManager = new OnboardingManager($db);
+$onboardingManager = new OnboardingManager($db, $logger);
 
 $secret = NextcloudBot\env('BOT_TOKEN');
 $ncUrl = NextcloudBot\env('NC_URL');
@@ -96,45 +96,69 @@ if (empty($message) || empty($roomToken) || empty($userId)) {
     exit('Missing required fields.');
 }
 
-// --- Check for Bot Mention (early exit if not mentioned) ---
-try {
-    $settingsStmt = $db->query("SELECT mention_name FROM bot_settings WHERE id = 1");
-    $settings = $settingsStmt->fetch();
-    $botMention = $settings['mention_name'] ?? '@educai';
-} catch (\PDOException $e) {
-    $logger->error('Failed to fetch bot mention setting', ['error' => $e->getMessage()]);
-    $botMention = '@educai'; // Fallback to default
-}
+// --- Multi-Bot Detection & Room Association ---
+$detectedBot = null;
+$currentBotId = null;
 
-// Remove @ if present in the stored mention
-$mentionName = ltrim($botMention, '@');
-
-$logger->info('Checking for bot mention', [
-    'botMention' => $botMention,
-    'mentionName' => $mentionName,
-    'message' => $message
-]);
-
-$roomConfigStmt = $db->prepare("SELECT mention_mode, onboarding_done FROM bot_room_config WHERE room_token = ?");
+// First, check if this room already has a bot assigned
+$roomConfigStmt = $db->prepare("SELECT bot_id, mention_mode, onboarding_done FROM bot_room_config WHERE room_token = ?");
 $roomConfigStmt->execute([$roomToken]);
 $roomConfigInfo = $roomConfigStmt->fetch();
 
-// Determine whether the bot should enforce mention for THIS message
-$shouldCheckMention = false; // default: no mention required
-
-if (!$roomConfigInfo) {
-    // First ever contact in this room -> mention required
-    $shouldCheckMention = true;
-} elseif ($roomConfigInfo['onboarding_done']) {
-    // Onboarding finished – respect the configured mention mode
-    $shouldCheckMention = ($roomConfigInfo['mention_mode'] ?? 'on_mention') === 'on_mention';
-}
-
-// If mention is required but not present, exit early
-if ($shouldCheckMention && stripos($message, '@' . $mentionName) === false) {
-    $logger->info('Bot not mentioned, ignoring message', ['message' => $message, 'required_mention' => $botMention]);
-    http_response_code(200);
-    exit('Bot not mentioned.');
+if ($roomConfigInfo && $roomConfigInfo['bot_id']) {
+    // Room already has a bot assigned - only listen to that bot
+    $currentBotId = $roomConfigInfo['bot_id'];
+    $botStmt = $db->prepare("SELECT * FROM bots WHERE id = ?");
+    $botStmt->execute([$currentBotId]);
+    $detectedBot = $botStmt->fetch();
+    
+    if ($detectedBot) {
+        $logger->info('Room has assigned bot', [
+            'room_token' => $roomToken,
+            'bot_id' => $currentBotId,
+            'bot_name' => $detectedBot['bot_name'],
+            'mention_name' => $detectedBot['mention_name']
+        ]);
+        
+        // Check if the assigned bot is mentioned
+        $mentionName = ltrim($detectedBot['mention_name'], '@');
+        $shouldCheckMention = $roomConfigInfo['onboarding_done'] && 
+                            ($roomConfigInfo['mention_mode'] ?? 'on_mention') === 'on_mention';
+        
+        if ($shouldCheckMention && stripos($message, '@' . $mentionName) === false) {
+            $logger->info('Assigned bot not mentioned, ignoring message', [
+                'message' => $message,
+                'required_mention' => $detectedBot['mention_name']
+            ]);
+            http_response_code(200);
+            exit('Bot not mentioned.');
+        }
+    }
+} else {
+    // New room - scan for any bot mention
+    $botsStmt = $db->query("SELECT * FROM bots ORDER BY created_at ASC");
+    $allBots = $botsStmt->fetchAll();
+    
+    foreach ($allBots as $bot) {
+        $mentionName = ltrim($bot['mention_name'], '@');
+        if (stripos($message, '@' . $mentionName) !== false) {
+            $detectedBot = $bot;
+            $currentBotId = $bot['id'];
+            $logger->info('New room - bot detected', [
+                'room_token' => $roomToken,
+                'bot_id' => $currentBotId,
+                'bot_name' => $bot['bot_name'],
+                'mention_name' => $bot['mention_name']
+            ]);
+            break;
+        }
+    }
+    
+    if (!$detectedBot) {
+        $logger->info('No bot mentioned in new room, ignoring message', ['message' => $message]);
+        http_response_code(200);
+        exit('No bot mentioned.');
+    }
 }
 
 // --- Special RESET command -------------------------------------------------
@@ -258,7 +282,7 @@ if (!$roomConfig) {
         $logger->info('Detected potential direct message', ['roomName' => $roomName]);
     }
     
-    // Create initial record - use the correct database schema
+    // Create initial record - use the correct database schema with bot_id
     $meta = ['stage' => 0, 'answers' => []];
     
     // Ensure boolean values are properly typed for PostgreSQL
@@ -268,11 +292,12 @@ if (!$roomConfig) {
     $logger->info('Inserting room config', [
         'roomToken' => $roomToken,
         'isGroup' => $isGroupBool,
-        'onboardingDone' => $onboardingDoneBool
+        'onboardingDone' => $onboardingDoneBool,
+        'botId' => $currentBotId
     ]);
     
     try {
-        $stmt = $db->prepare("INSERT INTO bot_room_config (room_token, is_group, mention_mode, onboarding_done, meta) VALUES (?, ?, ?, ?, ?)");
+        $stmt = $db->prepare("INSERT INTO bot_room_config (room_token, is_group, mention_mode, onboarding_done, meta, bot_id) VALUES (?, ?, ?, ?, ?, ?)");
         
         // Bind parameters with explicit types for PostgreSQL boolean compatibility
         $stmt->bindValue(1, $roomToken, \PDO::PARAM_STR);
@@ -280,15 +305,17 @@ if (!$roomConfig) {
         $stmt->bindValue(3, 'on_mention', \PDO::PARAM_STR);
         $stmt->bindValue(4, $onboardingDoneBool, \PDO::PARAM_BOOL);
         $stmt->bindValue(5, json_encode($meta), \PDO::PARAM_STR);
+        $stmt->bindValue(6, $currentBotId, \PDO::PARAM_INT);
         
         $stmt->execute();
-        $logger->info('Successfully created room config');
+        $logger->info('Successfully created room config with bot association');
     } catch (\PDOException $e) {
         $logger->error('Failed to create room config', [
             'error' => $e->getMessage(),
             'roomToken' => $roomToken,
             'isGroup' => $isGroupBool,
-            'onboardingDone' => $onboardingDoneBool
+            'onboardingDone' => $onboardingDoneBool,
+            'botId' => $currentBotId
         ]);
         http_response_code(500);
         exit('Database error creating room config.');
@@ -298,7 +325,8 @@ if (!$roomConfig) {
         'is_group' => $isGroupBool, 
         'mention_mode' => 'on_mention', 
         'onboarding_done' => $onboardingDoneBool, 
-        'meta' => $meta
+        'meta' => $meta,
+        'bot_id' => $currentBotId
     ];
 } else {
     $roomConfig['meta'] = json_decode($roomConfig['meta'], true);
@@ -364,9 +392,8 @@ if ($roomConfig['onboarding_done'] == false) {
     // When stage is 0 and we have not yet asked the very first question, do so now and mark it asked.
     $firstAsked = $roomConfig['meta']['first_question_asked'] ?? false;
     if ($currentStage === 0 && $firstAsked === false) {
-        $settingsStmt = $db->query("SELECT * FROM bot_settings WHERE id = 1");
-        $globalSettings = $settingsStmt->fetch() ?: [];
-        $nextStep = $onboardingManager->getNextQuestion($roomConfig, $globalSettings);
+        // Use the detected bot's settings for onboarding
+        $nextStep = $onboardingManager->getNextQuestion($roomConfig, $detectedBot);
 
         // Mark that we already asked the first question so we don't repeat it.
         $roomConfig['meta']['first_question_asked'] = true;
@@ -424,10 +451,8 @@ if ($roomConfig['onboarding_done'] == false) {
         }
     }
 
-    // Get the next question (or completion message)
-    $settingsStmt = $db->query("SELECT * FROM bot_settings WHERE id = 1");
-    $globalSettings = $settingsStmt->fetch() ?: [];
-    $nextStep = $onboardingManager->getNextQuestion($roomConfig, $globalSettings);
+    // Get the next question (or completion message) using bot-specific settings
+    $nextStep = $onboardingManager->getNextQuestion($roomConfig, $detectedBot);
 
     $logger->info('Sending onboarding question', ['question' => $nextStep['question']]);
     $success = sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
@@ -445,10 +470,9 @@ $stmt = $db->prepare("INSERT INTO bot_conversations (room_token, user_id, role, 
 $stmt->execute([$roomToken, $userId, $message]);
 
 // --- 5. RAG Context ---
-$settingsStmt = $db->query("SELECT embedding_model, rag_top_k FROM bot_settings WHERE id = 1");
-$ragSettings = $settingsStmt->fetch();
-$embeddingModel = $ragSettings['embedding_model'] ?? 'e5-mistral-7b-instruct';
-$topK = (int)($ragSettings['rag_top_k'] ?? 3);
+// Use the detected bot's settings for RAG
+$embeddingModel = $detectedBot['embedding_model'] ?? 'e5-mistral-7b-instruct';
+$topK = (int)($detectedBot['rag_top_k'] ?? 3);
 
 $ragContext = '';
 try {
@@ -456,8 +480,8 @@ try {
     $logger->info('Embedding response received', ['hasError' => isset($embeddingResponse['error'])]);
     
     if (!isset($embeddingResponse['error']) && !empty($embeddingResponse['data'][0]['embedding'])) {
-        $similarChunks = $vectorStore->findSimilar($embeddingResponse['data'][0]['embedding'], $topK);
-        $logger->info('Similar chunks found', ['count' => count($similarChunks)]);
+        $similarChunks = $vectorStore->findSimilar($embeddingResponse['data'][0]['embedding'], $topK, $currentBotId);
+        $logger->info('Similar chunks found', ['count' => count($similarChunks), 'bot_id' => $currentBotId]);
         
         if (!empty($similarChunks)) {
             $ragContext = "Here is some context that might be relevant:\n\n---\n" . implode("\n\n", $similarChunks) . "\n---\n\n";
@@ -475,16 +499,9 @@ $historyStmt = $db->prepare("SELECT role, content FROM bot_conversations WHERE r
 $historyStmt->execute([$roomToken]);
 $history = array_reverse($historyStmt->fetchAll());
 
-// Fetch system prompt and model
-$settingsStmt = $db->query("SELECT system_prompt, default_model, onboarding_group_questions, onboarding_dm_questions FROM bot_settings WHERE id = 1");
-$globalSettings = $settingsStmt->fetch() ?: [
-    'system_prompt' => 'You are a helpful assistant.', 
-    'default_model' => 'meta-llama-3.1-8b-instruct',
-    'onboarding_group_questions' => '[]',
-    'onboarding_dm_questions' => '[]'
-];
-$systemPrompt = $globalSettings['system_prompt'];
-$model = $globalSettings['default_model'];
+// Use the detected bot's settings for system prompt and model
+$systemPrompt = $detectedBot['system_prompt'] ?? 'You are a helpful assistant.';
+$model = $detectedBot['default_model'] ?? 'meta-llama-3.1-8b-instruct';
 
 // --- Inject Onboarding Context into System Prompt ---
 $onboardingContext = '';
@@ -500,11 +517,11 @@ if ($roomConfigForPrompt) {
 
     $onboardingContext .= "\n\n--- User Onboarding Context ---\n";
     $onboardingContext .= "Chat Type: " . ($isGroup ? "Group Chat" : "Direct Message") . "\n";
-    $onboardingContext .= "Bot Interaction Style: " . ($mentionMode === 'always' ? "Respond to every message" : "Respond only when mentioned (@" . $mentionName . ")") . "\n";
+    $onboardingContext .= "Bot Interaction Style: " . ($mentionMode === 'always' ? "Respond to every message" : "Respond only when mentioned (" . $detectedBot['mention_name'] . ")") . "\n";
 
     $questionsRaw = $isGroup
-        ? ($globalSettings['onboarding_group_questions'] ?? '[]')
-        : ($globalSettings['onboarding_dm_questions'] ?? '[]');
+        ? ($detectedBot['onboarding_group_questions'] ?? '[]')
+        : ($detectedBot['onboarding_dm_questions'] ?? '[]');
     $questions = json_decode($questionsRaw, true) ?: [];
 
     if (!empty($answers) && !empty($questions)) {
