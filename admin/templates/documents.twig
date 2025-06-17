@@ -6,184 +6,98 @@
 
 {% block content %}
     <div class="box">
-        <h2 class="subtitle">Upload New Document</h2>
-        
-        <!-- Upload Area -->
-        <div class="upload-area" id="uploadArea">
-            <div class="file has-name is-fullwidth is-large" id="fileSelector">
-                <label class="file-label">
-                    <input class="file-input" type="file" name="document" id="documentInput" accept=".pdf,.txt,.doc,.docx,.md">
-                    <span class="file-cta">
-                        <span class="file-icon">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                <polyline points="7,10 12,15 17,10"/>
-                                <line x1="12" y1="15" x2="12" y2="3"/>
-                            </svg>
-                        </span>
-                        <span class="file-label">
-                            Choose a document to upload…
-                        </span>
-                    </span>
-                    <span class="file-name" id="fileName">
-                        No file selected
-                    </span>
-                </label>
+        <div class="level">
+            <div class="level-left">
+                <h2 class="subtitle">Manage Knowledge Base for:</h2>
             </div>
+            <div class="level-right">
+                <form id="botSelectorForm" method="get" action="{{ url_for('documents') }}">
+                    <div class="field has-addons">
+                        <div class="control">
+                            <div class="select is-medium">
+                                <select name="bot_id" onchange="document.getElementById('botSelectorForm').submit()">
+                                    {% for bot in bots %}
+                                        <option value="{{ bot.id }}" {{ bot.id == currentBotId ? 'selected' : '' }}>
+                                            {{ bot.bot_name }}
+                                        </option>
+                                    {% else %}
+                                        <option>No bots available</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="control">
+                             <button type="submit" class="button is-info is-medium">
+                                <span class="icon"><i class="fas fa-filter"></i></span>
+                                <span>Switch Bot</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <hr>
+
+        {% if currentBotId %}
+            <h3 class="title is-5">Upload New Document to <span class="has-text-primary">{{ bots|filter(b => b.id == currentBotId)|first.bot_name }}</span></h3>
             
-            <!-- Drag & Drop Zone -->
-            <div class="drag-drop-zone mt-4" id="dragDropZone" style="display: none;">
-                <div class="has-text-centered py-6">
-                    <span class="icon is-large has-text-grey-light">
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7,10 12,15 17,10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                    </span>
-                    <p class="has-text-grey">Drop your document here or click to browse</p>
-                </div>
-            </div>
-        </div>
+            <!-- Hidden bot_id field for async upload -->
+            <input type="hidden" id="botIdForUpload" value="{{ currentBotId }}">
 
-        <!-- Upload Progress -->
-        <div class="upload-progress mt-4" id="uploadProgress" style="display: none;">
-            <div class="level is-mobile mb-2">
-                <div class="level-left">
-                    <div class="level-item">
-                        <span class="tag is-info is-light">
-                            <span class="icon">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                    <polyline points="7,10 12,15 17,10"/>
-                                    <line x1="12" y1="15" x2="12" y2="3"/>
-                                </svg>
+            <!-- Upload Area -->
+            <div class="upload-area" id="uploadArea">
+                <div class="file has-name is-fullwidth is-large" id="fileSelector">
+                    <label class="file-label">
+                        <input class="file-input" type="file" name="document" id="documentInput" accept=".pdf,.txt,.doc,.docx,.md">
+                        <span class="file-cta">
+                            <span class="file-icon">
+                                <i class="fas fa-upload"></i>
                             </span>
-                            <span>Uploading</span>
-                        </span>
-                    </div>
-                </div>
-                <div class="level-right">
-                    <div class="level-item">
-                        <span id="uploadPercent">0%</span>
-                    </div>
-                </div>
-            </div>
-            <progress class="progress is-info" id="uploadProgressBar" value="0" max="100">0%</progress>
-            <p class="help" id="uploadStatus">Preparing upload...</p>
-        </div>
-
-        <!-- Embedding Progress -->
-        <div class="embedding-progress mt-4" id="embeddingProgress" style="display: none;">
-            <div class="level is-mobile mb-2">
-                <div class="level-left">
-                    <div class="level-item">
-                        <span class="tag is-warning is-light">
-                            <span class="icon">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="3"/>
-                                    <path d="M12 1v6m0 6v6"/>
-                                    <path d="m21 12-6 0m-6 0-6 0"/>
-                                </svg>
+                            <span class="file-label">
+                                Choose a document to upload…
                             </span>
-                            <span>Processing</span>
                         </span>
-                    </div>
-                </div>
-                <div class="level-right">
-                    <div class="level-item">
-                        <span id="embeddingPercent">0%</span>
-                    </div>
-                </div>
-            </div>
-            <progress class="progress is-warning" id="embeddingProgressBar" value="0" max="100">0%</progress>
-            <p class="help" id="embeddingStatus">Preparing document processing...</p>
-        </div>
-
-        <!-- Success Message -->
-        <div class="notification is-success is-light" id="successMessage" style="display: none;">
-            <button class="delete" id="dismissSuccess"></button>
-            <div class="level is-mobile">
-                <div class="level-left">
-                    <div class="level-item">
-                        <span class="icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                                <polyline points="22,4 12,14.01 9,11.01"/>
-                            </svg>
+                        <span class="file-name" id="fileName">
+                            No file selected
                         </span>
-                        <div>
-                            <p class="has-text-weight-semibold">Document processed successfully!</p>
-                            <p class="is-size-7" id="successDetails"></p>
-                        </div>
-                    </div>
+                    </label>
                 </div>
             </div>
-        </div>
 
-        <!-- Error Message -->
-        <div class="notification is-danger is-light" id="errorMessage" style="display: none;">
-            <button class="delete" id="dismissError"></button>
-            <div class="level is-mobile">
-                <div class="level-left">
-                    <div class="level-item">
-                        <span class="icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"/>
-                                <line x1="15" y1="9" x2="9" y2="15"/>
-                                <line x1="9" y1="9" x2="15" y2="15"/>
-                            </svg>
-                        </span>
-                        <div>
-                            <p class="has-text-weight-semibold">Upload failed</p>
-                            <p class="is-size-7" id="errorDetails"></p>
-                        </div>
-                    </div>
+            <!-- Upload/Embedding Progress, Messages, etc. -->
+            {% include 'partials/_upload_progress.twig' %}
+
+            <!-- Action Buttons -->
+            <div class="field is-grouped mt-4">
+                <div class="control">
+                    <button class="button is-primary" id="uploadBtn" disabled>
+                        <span class="icon"><i class="fas fa-cloud-upload-alt"></i></span>
+                        <span>Upload and Process</span>
+                    </button>
+                </div>
+                <div class="control">
+                    <button class="button is-light" id="cancelBtn" style="display: none;">
+                        <span class="icon"><i class="fas fa-times"></i></span>
+                        <span>Cancel</span>
+                    </button>
+                </div>
+                <div class="control">
+                    <button class="button is-info is-light" id="clearBtn" style="display: none;">
+                        <span class="icon"><i class="fas fa-sync-alt"></i></span>
+                        <span>Clear</span>
+                    </button>
                 </div>
             </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="field is-grouped mt-4">
-            <div class="control">
-                <button class="button is-primary" id="uploadBtn" disabled>
-                    <span class="icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7,10 12,15 17,10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                    </span>
-                    <span>Upload and Process</span>
-                </button>
+        {% else %}
+             <div class="notification is-warning">
+                Please <a href="{{ url_for('bots.create') }}">create a bot</a> first before uploading documents.
             </div>
-            <div class="control">
-                <button class="button is-light" id="cancelBtn" style="display: none;">
-                    <span class="icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="18" y1="6" x2="6" y2="18"/>
-                            <line x1="6" y1="6" x2="18" y2="18"/>
-                        </svg>
-                    </span>
-                    <span>Cancel</span>
-                </button>
-            </div>
-            <div class="control">
-                <button class="button is-info is-light" id="clearBtn" style="display: none;">
-                    <span class="icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="1 4 1 10 7 10"/>
-                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-                        </svg>
-                    </span>
-                    <span>Clear</span>
-                </button>
-            </div>
-        </div>
+        {% endif %}
     </div>
 
+    {% if currentBotId %}
     <div class="box mt-5">
-        <h2 class="subtitle">Uploaded Documents</h2>
+        <h2 class="subtitle">Uploaded Documents for <span class="has-text-primary">{{ bots|filter(b => b.id == currentBotId)|first.bot_name }}</span></h2>
         <div class="table-container">
             <table class="table is-fullwidth is-striped is-hoverable">
                 <thead>
@@ -199,140 +113,46 @@
                     <tr data-doc-id="{{ doc.id }}">
                         <td>
                             <span class="icon-text">
-                                <span class="icon">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                        <polyline points="14,2 14,8 20,8"/>
-                                    </svg>
-                                </span>
+                                <span class="icon"><i class="fas fa-file-alt"></i></span>
                                 <span>{{ doc.filename }}</span>
                             </span>
                         </td>
                         <td>
                             <span class="tag is-success is-light">
-                                <span class="icon">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="20,6 9,17 4,12"/>
-                                    </svg>
-                                </span>
+                                <span class="icon"><i class="fas fa-check"></i></span>
                                 <span>Ready</span>
                             </span>
                         </td>
                         <td>{{ doc.created_at|date('Y-m-d H:i:s') }}</td>
                         <td>
                             <button type="button" class="button is-danger is-small delete-doc-btn" data-doc-id="{{ doc.id }}" data-filename="{{ doc.filename }}">
-                                <span class="icon">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="3,6 5,6 21,6"/>
-                                        <path d="m19,6 v14 a2,2 0 0,1 -2,2 H7 a2,2 0 0,1 -2,-2 V6 m3,0 V4 a2,2 0 0,1 2,-2 h4 a2,2 0 0,1 2,2 v2"/>
-                                    </svg>
-                                </span>
+                                <span class="icon"><i class="fas fa-trash"></i></span>
                                 <span>Delete</span>
                             </button>
                         </td>
                     </tr>
                     {% else %}
                     <tr id="noDocsRow">
-                        <td colspan="4" class="has-text-centered has-text-grey">No documents have been uploaded yet.</td>
+                        <td colspan="4" class="has-text-centered has-text-grey">No documents have been uploaded for this bot yet.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
+    {% endif %}
 
     <!-- Delete Confirmation Modal -->
-    <div class="modal" id="deleteModal">
-        <div class="modal-background"></div>
-        <div class="modal-card">
-            <header class="modal-card-head">
-                <p class="modal-card-title">Confirm Deletion</p>
-                <button class="delete" aria-label="close" id="closeDeleteModal"></button>
-            </header>
-            <section class="modal-card-body">
-                <p>Are you sure you want to delete <strong id="deleteFileName"></strong> and all its embeddings?</p>
-                <p class="has-text-danger is-size-7 mt-2">This action cannot be undone.</p>
-            </section>
-            <footer class="modal-card-foot">
-                <button class="button is-danger" id="confirmDelete">Delete</button>
-                <button class="button" id="cancelDelete">Cancel</button>
-            </footer>
-        </div>
-    </div>
-
+    {% include 'partials/_delete_modal.twig' %}
+    
     <style>
-        .drag-drop-zone {
-            border: 2px dashed #dbdbdb;
-            border-radius: 6px;
-            transition: all 0.3s ease;
-            cursor: pointer;
+        .upload-area .file-cta {
+            background-color: #f5f5f5;
         }
-        
-        .drag-drop-zone:hover,
-        .drag-drop-zone.drag-over {
-            border-color: #3273dc;
-            background-color: #f8f9ff;
-        }
-        
-        .upload-progress,
-        .embedding-progress {
-            animation: slideDown 0.3s ease-out;
-        }
-        
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        .progress {
-            transition: all 0.3s ease;
-        }
-        
-        .notification {
-            animation: slideDown 0.3s ease-out;
-        }
-        
-        /* Ensure modal is hidden by default */
-        .modal {
-            display: none;
-        }
-        
-        .modal.is-active {
-            display: flex;
-        }
-        
-        /* Prevent body scroll when modal is open */
-        body.modal-open {
-            overflow: hidden;
-        }
-        
-        /* Make modal background clickable for closing */
-        .modal-background {
-            cursor: pointer;
-        }
-        
-        /* Improve delete button interaction */
-        .delete-doc-btn {
-            transition: all 0.2s ease;
-        }
-        
-        .delete-doc-btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-        }
-        
-        .delete-doc-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none !important;
+        .upload-area .file-cta:hover {
+            background-color: #eeeeee;
         }
     </style>
 
-    <script src="../admin/assets/js/documents.js"></script>
+    <script src="../admin/assets/js/documents.js?v=2"></script>
 {% endblock %} 

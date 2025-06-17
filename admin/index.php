@@ -80,6 +80,92 @@ try {
     error_log("Schema migration warning: " . $e->getMessage());
 }
 
+// --- Multi-Bot Migration ---
+try {
+    // Check if the migration has already run by looking for the 'bots' table.
+    $checkBotsTable = $db->query("SELECT to_regclass('public.bots')")->fetchColumn();
+
+    if (!$checkBotsTable) {
+        $logger->info('Starting multi-bot database migration...');
+        $db->beginTransaction();
+
+        // 1. Create the new 'bots' table
+        $db->exec("CREATE TABLE bots (
+            id SERIAL PRIMARY KEY,
+            bot_name TEXT NOT NULL,
+            mention_name TEXT UNIQUE NOT NULL,
+            default_model TEXT DEFAULT 'meta-llama-3.1-8b-instruct',
+            system_prompt TEXT,
+            onboarding_group_questions JSONB,
+            onboarding_dm_questions JSONB,
+            embedding_model TEXT DEFAULT 'e5-mistral-7b-instruct',
+            rag_top_k INTEGER DEFAULT 3,
+            rag_chunk_size INTEGER DEFAULT 250,
+            rag_chunk_overlap INTEGER DEFAULT 25,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )");
+        $logger->info('Created "bots" table.');
+
+        // 2. Add 'bot_id' columns to existing tables
+        $db->exec("ALTER TABLE bot_docs ADD COLUMN IF NOT EXISTS bot_id INTEGER");
+        $db->exec("ALTER TABLE bot_room_config ADD COLUMN IF NOT EXISTS bot_id INTEGER");
+        $db->exec("ALTER TABLE bot_conversations ADD COLUMN IF NOT EXISTS bot_id INTEGER");
+        $logger->info('Added "bot_id" columns to relevant tables.');
+
+        // 3. Migrate data from the old 'bot_settings' table
+        $oldSettingsStmt = $db->query("SELECT * FROM bot_settings WHERE id = 1");
+        $oldSettings = $oldSettingsStmt->fetch(\PDO::FETCH_ASSOC);
+
+        if ($oldSettings) {
+            $insertBotStmt = $db->prepare(
+                "INSERT INTO bots (bot_name, mention_name, default_model, system_prompt, onboarding_group_questions, onboarding_dm_questions, embedding_model, rag_top_k, rag_chunk_size, rag_chunk_overlap)
+                 VALUES (:bot_name, :mention_name, :default_model, :system_prompt, :onboarding_group_questions, :onboarding_dm_questions, :embedding_model, :rag_top_k, :rag_chunk_size, :rag_chunk_overlap)
+                 RETURNING id"
+            );
+            $insertBotStmt->execute([
+                ':bot_name' => 'Default Bot',
+                ':mention_name' => $oldSettings['mention_name'] ?? '@educai',
+                ':default_model' => $oldSettings['default_model'] ?? 'meta-llama-3.1-8b-instruct',
+                ':system_prompt' => $oldSettings['system_prompt'],
+                ':onboarding_group_questions' => $oldSettings['onboarding_group_questions'],
+                ':onboarding_dm_questions' => $oldSettings['onboarding_dm_questions'],
+                ':embedding_model' => $oldSettings['embedding_model'] ?? 'e5-mistral-7b-instruct',
+                ':rag_top_k' => $oldSettings['rag_top_k'] ?? 3,
+                ':rag_chunk_size' => $oldSettings['rag_chunk_size'] ?? 250,
+                ':rag_chunk_overlap' => $oldSettings['rag_chunk_overlap'] ?? 25
+            ]);
+            $firstBotId = $insertBotStmt->fetchColumn();
+            $logger->info('Migrated settings from "bot_settings" to "bots" table.', ['new_bot_id' => $firstBotId]);
+
+            // 4. Update existing records to link to the new default bot
+            if ($firstBotId) {
+                $db->exec("UPDATE bot_docs SET bot_id = " . (int)$firstBotId);
+                $db->exec("UPDATE bot_room_config SET bot_id = " . (int)$firstBotId);
+                $db->exec("UPDATE bot_conversations SET bot_id = " . (int)$firstBotId);
+                $logger->info('Updated existing records in docs, rooms, and conversations with the new bot_id.');
+
+                // 5. Add foreign key constraints
+                $db->exec("ALTER TABLE bot_docs ADD CONSTRAINT fk_bot_docs_bot_id FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE");
+                $db->exec("ALTER TABLE bot_room_config ADD CONSTRAINT fk_bot_room_config_bot_id FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE");
+                $db->exec("ALTER TABLE bot_conversations ADD CONSTRAINT fk_bot_conversations_bot_id FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE");
+                $logger->info('Added foreign key constraints.');
+            }
+        } else {
+             $logger->warning('No existing settings found in "bot_settings" to migrate.');
+        }
+
+        $db->commit();
+        $logger->info('Multi-bot database migration completed successfully.');
+
+    }
+} catch (\PDOException $e) {
+    if ($db->inTransaction()) {
+        $db->rollBack();
+    }
+    $logger->error('Multi-bot database migration failed!', ['error' => $e->getMessage()]);
+}
+
 // Initialize default bot settings if not exists
 $settingsExist = $db->query("SELECT COUNT(*) FROM bot_settings WHERE id = 1")->fetchColumn();
 if ($settingsExist == 0) {
@@ -202,8 +288,22 @@ $app->get('/', function (Request $request, Response $response) use ($twig, $db) 
 })->setName('dashboard')->add($authMiddleware);
 
 $app->get('/documents', function (Request $request, Response $response) use ($twig, $db) {
-    $docs = $db->query("SELECT id, filename, created_at FROM bot_docs ORDER BY created_at DESC")->fetchAll();
-    return $twig->render($response, 'documents.twig', ['docs' => $docs, 'currentPage' => 'documents']);
+    $bots = $db->query("SELECT id, bot_name FROM bots ORDER BY bot_name ASC")->fetchAll();
+    $currentBotId = $request->getQueryParams()['bot_id'] ?? ($bots[0]['id'] ?? null);
+    
+    $docs = [];
+    if ($currentBotId) {
+        $stmt = $db->prepare("SELECT id, filename, created_at FROM bot_docs WHERE bot_id = ? ORDER BY created_at DESC");
+        $stmt->execute([$currentBotId]);
+        $docs = $stmt->fetchAll();
+    }
+
+    return $twig->render($response, 'documents.twig', [
+        'docs' => $docs,
+        'bots' => $bots,
+        'currentBotId' => $currentBotId,
+        'currentPage' => 'documents'
+    ]);
 })->setName('documents')->add($authMiddleware);
 
 $app->post('/documents/upload', function (Request $request, Response $response) use ($db, $embeddingService, $app) {
@@ -218,18 +318,26 @@ $app->post('/documents/upload', function (Request $request, Response $response) 
         $uploadedFile->moveTo($targetPath);
         $content = file_get_contents($targetPath);
         $checksum = hash('sha256', $content);
-        $stmt = $db->prepare("SELECT id FROM bot_docs WHERE checksum = ?");
-        $stmt->execute([$checksum]);
+        $botId = $request->getParsedBody()['bot_id'] ?? null;
+
+        if (!$botId) {
+            // Handle error: no bot selected
+            // For now, redirecting, but a proper error message would be better
+            return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('documents'))->withStatus(302);
+        }
+
+        $stmt = $db->prepare("SELECT id FROM bot_docs WHERE checksum = ? AND bot_id = ?");
+        $stmt->execute([$checksum, $botId]);
         if ($stmt->fetch()) {
             unlink($targetPath);
         } else {
-            $stmt = $db->prepare("INSERT INTO bot_docs (filename, path, checksum) VALUES (?, ?, ?)");
-            $stmt->execute([$basename, $targetPath, $checksum]);
+            $stmt = $db->prepare("INSERT INTO bot_docs (filename, path, checksum, bot_id) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$basename, $targetPath, $checksum, $botId]);
             $docId = $db->lastInsertId();
             $embeddingService->generateAndStoreEmbeddings((int)$docId, $content);
         }
     }
-    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('documents'))->withStatus(302);
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('documents', [], ['bot_id' => $botId]))->withStatus(302);
 })->setName('documents-upload')->add($authMiddleware);
 
 // Async upload endpoint
@@ -253,17 +361,22 @@ $app->post('/documents/upload-async', function (Request $request, Response $resp
         $content = file_get_contents($targetPath);
         $checksum = hash('sha256', $content);
         
-        // Check for duplicates
-        $stmt = $db->prepare("SELECT id FROM bot_docs WHERE checksum = ?");
-        $stmt->execute([$checksum]);
+        $botId = $request->getParsedBody()['bot_id'] ?? null;
+        if (!$botId) {
+            throw new \Exception('No bot selected for upload.');
+        }
+
+        // Check for duplicates for the specific bot
+        $stmt = $db->prepare("SELECT id FROM bot_docs WHERE checksum = ? AND bot_id = ?");
+        $stmt->execute([$checksum, $botId]);
         if ($existingDoc = $stmt->fetch()) {
             unlink($targetPath);
-            throw new \Exception('Document already exists');
+            throw new \Exception('Document already exists for this bot.');
         }
         
         // Insert document record
-        $stmt = $db->prepare("INSERT INTO bot_docs (filename, path, checksum, processing_status) VALUES (?, ?, ?, 'pending')");
-        $stmt->execute([$basename, $targetPath, $checksum]);
+        $stmt = $db->prepare("INSERT INTO bot_docs (filename, path, checksum, processing_status, bot_id) VALUES (?, ?, ?, 'pending', ?)");
+        $stmt->execute([$basename, $targetPath, $checksum, $botId]);
         $docId = $db->lastInsertId();
         
         // Initialize progress tracking
@@ -591,73 +704,127 @@ $app->post('/documents/delete', function (Request $request, Response $response) 
     }
 })->setName('documents-delete')->add($authMiddleware);
 
-$app->get('/models', function (Request $request, Response $response) use ($twig, $db, $apiClient) {
-    $apiModels = $apiClient->getModels();
-    $settings = $db->query("SELECT default_model FROM bot_settings WHERE id = 1")->fetch();
-    return $twig->render($response, 'models.twig', ['models' => $apiModels['data'] ?? [], 'current_model' => $settings['default_model'] ?? '', 'currentPage' => 'models']);
-})->setName('models')->add($authMiddleware);
+$app->get('/bots', function (Request $request, Response $response) use ($twig, $db) {
+    $bots = $db->query("SELECT id, bot_name, mention_name, default_model, created_at FROM bots ORDER BY created_at DESC")->fetchAll();
+    return $twig->render($response, 'bots/index.twig', ['bots' => $bots, 'currentPage' => 'bots']);
+})->setName('bots.index')->add($authMiddleware);
 
-$app->post('/models', function (Request $request, Response $response) use ($db, $app) {
-    $model = $request->getParsedBody()['model'] ?? '';
-    $stmt = $db->prepare("UPDATE bot_settings SET default_model = ? WHERE id = 1");
-    $stmt->execute([$model]);
-    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('models'))->withStatus(302);
-})->setName('models-update')->add($authMiddleware);
+$app->get('/bots/new', function (Request $request, Response $response) use ($twig) {
+    return $twig->render($response, 'bots/create.twig', ['currentPage' => 'bots']);
+})->setName('bots.create')->add($authMiddleware);
 
-$app->map(['GET', 'POST'], '/prompt', function (Request $request, Response $response) use ($twig, $db, $app) {
-    if ($request->getMethod() === 'POST') {
-        $prompt = $request->getParsedBody()['system_prompt'] ?? '';
-        $stmt = $db->prepare("UPDATE bot_settings SET system_prompt = ? WHERE id = 1");
-        $stmt->execute([$prompt]);
-        return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('prompt'))->withStatus(302);
+$app->post('/bots', function (Request $request, Response $response) use ($db, $app) {
+    $body = $request->getParsedBody();
+    $botName = $body['bot_name'] ?? 'New Bot';
+    $mentionName = $body['mention_name'] ?? '';
+
+    if (!str_starts_with($mentionName, '@')) {
+        $mentionName = '@' . $mentionName;
     }
-    $settings = $db->query("SELECT system_prompt FROM bot_settings WHERE id = 1")->fetch();
-    return $twig->render($response, 'prompt.twig', ['system_prompt' => $settings['system_prompt'] ?? '', 'currentPage' => 'prompt']);
-})->setName('prompt')->add($authMiddleware);
 
-$app->map(['GET', 'POST'], '/onboarding', function (Request $request, Response $response) use ($twig, $db, $app) {
-    if ($request->getMethod() === 'POST') {
-        $botMention = trim($request->getParsedBody()['bot_mention'] ?? '@educai');
-        $groupQuestions = $request->getParsedBody()['group_questions'] ?? '';
-        $dmQuestions = $request->getParsedBody()['dm_questions'] ?? '';
-        
-        // Ensure mention starts with @
-        if (!str_starts_with($botMention, '@')) {
-            $botMention = '@' . $botMention;
-        }
-        
-        $groupJson = json_encode(array_filter(array_map('trim', explode("\n", $groupQuestions))));
-        $dmJson = json_encode(array_filter(array_map('trim', explode("\n", $dmQuestions))));
-        
-        // Update bot mention and onboarding questions
-        $stmt = $db->prepare("UPDATE bot_settings SET mention_name = ?, onboarding_group_questions = ?, onboarding_dm_questions = ? WHERE id = 1");
-        $stmt->execute([$botMention, $groupJson, $dmJson]);
-        return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('onboarding'))->withStatus(302);
+    try {
+        $stmt = $db->prepare("INSERT INTO bots (bot_name, mention_name) VALUES (?, ?)");
+        $stmt->execute([$botName, $mentionName]);
+    } catch (\PDOException $e) {
+        // Handle unique constraint violation for mention_name
+        // You would add proper error feedback to the user here
     }
-    
-    // Get current settings
-    $settings = $db->query("SELECT mention_name, onboarding_group_questions, onboarding_dm_questions FROM bot_settings WHERE id = 1")->fetch();
-    
-    return $twig->render($response, 'onboarding.twig', [
-        'bot_mention' => $settings['mention_name'] ?? '@educai',
-        'group_questions' => implode("\n", json_decode($settings['onboarding_group_questions'] ?? '[]', true)), 
-        'dm_questions' => implode("\n", json_decode($settings['onboarding_dm_questions'] ?? '[]', true)), 
-        'currentPage' => 'onboarding'
-    ]);
-})->setName('onboarding')->add($authMiddleware);
 
-$app->map(['GET', 'POST'], '/rag-settings', function (Request $request, Response $response) use ($twig, $db, $app, $apiClient) {
-    if ($request->getMethod() === 'POST') {
-        $body = $request->getParsedBody();
-        $stmt = $db->prepare("UPDATE bot_settings SET embedding_model = ?, rag_top_k = ?, rag_chunk_size = ?, rag_chunk_overlap = ? WHERE id = 1");
-        $stmt->execute([$body['embedding_model'] ?? 'e5-mistral-7b-instruct', (int)($body['rag_top_k'] ?? 3), (int)($body['rag_chunk_size'] ?? 250), (int)($body['rag_chunk_overlap'] ?? 25)]);
-        return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('rag-settings'))->withStatus(302);
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('bots.index'))->withStatus(302);
+})->setName('bots.store')->add($authMiddleware);
+
+$app->get('/bots/{id}/edit', function (Request $request, Response $response, array $args) use ($twig, $db, $apiClient) {
+    $botId = (int)$args['id'];
+    $stmt = $db->prepare("SELECT * FROM bots WHERE id = ?");
+    $stmt->execute([$botId]);
+    $bot = $stmt->fetch();
+
+    if (!$bot) {
+        // Handle bot not found
+        return $response->withStatus(404);
     }
+
+    // Decode JSON fields for the template
+    $bot['onboarding_group_questions'] = implode("\n", json_decode($bot['onboarding_group_questions'] ?? '[]', true));
+    $bot['onboarding_dm_questions'] = implode("\n", json_decode($bot['onboarding_dm_questions'] ?? '[]', true));
+
     $models = $apiClient->getModels()['data'] ?? [];
     $embeddingModels = array_filter($models, fn($m) => strpos($m['id'], 'e5') !== false || strpos($m['id'], 'embed') !== false);
-    $settings = $db->query("SELECT * FROM bot_settings WHERE id = 1")->fetch();
-    return $twig->render($response, 'rag_settings.twig', ['settings' => $settings, 'embeddingModels' => $embeddingModels, 'currentPage' => 'rag-settings']);
-})->setName('rag-settings')->add($authMiddleware);
+    
+    return $twig->render($response, 'bots/edit.twig', [
+        'bot' => $bot,
+        'chatModels' => $models,
+        'embeddingModels' => $embeddingModels,
+        'currentPage' => 'bots'
+    ]);
+})->setName('bots.edit')->add($authMiddleware);
+
+$app->post('/bots/{id}/edit', function (Request $request, Response $response, array $args) use ($db, $app) {
+    $botId = (int)$args['id'];
+    $body = $request->getParsedBody();
+
+    // General Settings
+    $defaultModel = $body['default_model'] ?? 'meta-llama-3.1-8b-instruct';
+    
+    // Prompt Settings
+    $systemPrompt = $body['system_prompt'] ?? '';
+
+    // Onboarding Settings
+    $botMention = trim($body['mention_name'] ?? '');
+    if (!str_starts_with($botMention, '@')) {
+        $botMention = '@' . $botMention;
+    }
+    $groupQuestions = json_encode(array_filter(array_map('trim', explode("\n", $body['group_questions'] ?? ''))));
+    $dmQuestions = json_encode(array_filter(array_map('trim', explode("\n", $body['dm_questions'] ?? ''))));
+
+    // RAG Settings
+    $embeddingModel = $body['embedding_model'] ?? 'e5-mistral-7b-instruct';
+    $ragTopK = (int)($body['rag_top_k'] ?? 3);
+    $ragChunkSize = (int)($body['rag_chunk_size'] ?? 250);
+    $ragChunkOverlap = (int)($body['rag_chunk_overlap'] ?? 25);
+    
+    $stmt = $db->prepare(
+        "UPDATE bots SET
+            default_model = :default_model,
+            system_prompt = :system_prompt,
+            mention_name = :mention_name,
+            onboarding_group_questions = :onboarding_group_questions,
+            onboarding_dm_questions = :onboarding_dm_questions,
+            embedding_model = :embedding_model,
+            rag_top_k = :rag_top_k,
+            rag_chunk_size = :rag_chunk_size,
+            rag_chunk_overlap = :rag_chunk_overlap,
+            updated_at = NOW()
+        WHERE id = :id"
+    );
+
+    $stmt->execute([
+        ':id' => $botId,
+        ':default_model' => $defaultModel,
+        ':system_prompt' => $systemPrompt,
+        ':mention_name' => $botMention,
+        ':onboarding_group_questions' => $groupQuestions,
+        ':onboarding_dm_questions' => $dmQuestions,
+        ':embedding_model' => $embeddingModel,
+        ':rag_top_k' => $ragTopK,
+        ':rag_chunk_size' => $ragChunkSize,
+        ':rag_chunk_overlap' => $ragChunkOverlap
+    ]);
+
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('bots.edit', ['id' => $botId]))->withStatus(302);
+})->setName('bots.update')->add($authMiddleware);
+
+
+$app->post('/bots/{id}/delete', function (Request $request, Response $response, array $args) use ($db, $app) {
+    $botId = (int)$args['id'];
+    
+    // Deleting a bot will cascade delete all associated documents, embeddings, and conversation history.
+    $stmt = $db->prepare("DELETE FROM bots WHERE id = ?");
+    $stmt->execute([$botId]);
+
+    // Redirect to the bots index page
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('bots.index'))->withStatus(302);
+})->setName('bots.delete')->add($authMiddleware);
 
 // Helper function to read log entries
 function getLogEntries(int $limit = 100): array {

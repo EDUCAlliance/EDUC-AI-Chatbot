@@ -1,0 +1,77 @@
+<h3 class="title is-4">System Prompt</h3>
+<p class="subtitle is-6">Define the bot's personality, behavior, and response guidelines.</p>
+<hr>
+
+<div class="field">
+    <label class="label">
+        <span class="icon-text">
+            <span class="icon"><i class="fas fa-file-alt"></i></span>
+            <span>System Instructions</span>
+        </span>
+    </label>
+    <div class="control">
+        <textarea class="textarea is-medium" name="system_prompt" id="systemPrompt" rows="12" 
+                  placeholder="e.g., You are a helpful assistant for the EDUC Alliance. You provide accurate, friendly, and educational responses to users' questions about academic topics, research, and educational resources.">{{ bot.system_prompt }}</textarea>
+    </div>
+    <div class="level is-mobile mt-2">
+        <div class="level-left">
+            <div class="level-item">
+                <p class="help">
+                    <span class="icon-text">
+                        <span class="icon has-text-info"><i class="fas fa-info-circle"></i></span>
+                        <span>This prompt is sent at the beginning of every conversation.</span>
+                    </span>
+                </p>
+            </div>
+        </div>
+        <div class="level-right">
+            <div class="level-item">
+                <span class="tag is-light" id="charCount">0 characters</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="notification is-info is-light">
+    <h5 class="title is-6">
+        <span class="icon-text">
+            <span class="icon"><i class="fas fa-lightbulb"></i></span>
+            <span>Effective System Prompt Tips</span>
+        </span>
+    </h5>
+    <div class="content is-small">
+        <ul>
+            <li><strong>Be specific:</strong> Clearly define the bot's role and expertise areas.</li>
+            <li><strong>Set tone:</strong> Specify whether responses should be formal, friendly, professional, etc.</li>
+            <li><strong>Include limitations:</strong> Mention what the bot should not do or discuss.</li>
+            <li><strong>Response format:</strong> Guide how responses should be structured (e.g., use markdown for lists).</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+// Script for character count - can be moved to a global JS file if needed
+document.addEventListener('DOMContentLoaded', function() {
+    const textarea = document.getElementById('systemPrompt');
+    const charCount = document.getElementById('charCount');
+
+    function updateCharCount() {
+        if (textarea && charCount) {
+            const count = textarea.value.length;
+            charCount.textContent = `${count} characters`;
+            if (count > 2000) { // Example warning threshold
+                charCount.classList.add('is-warning');
+                charCount.classList.remove('is-light');
+            } else {
+                charCount.classList.remove('is-warning');
+                charCount.classList.add('is-light');
+            }
+        }
+    }
+
+    if (textarea) {
+        textarea.addEventListener('input', updateCharCount);
+        updateCharCount();
+    }
+});
+</script> 

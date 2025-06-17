@@ -1,0 +1,44 @@
+<h3 class="title is-4">Model Selection</h3>
+<p class="subtitle is-6">Choose the AI models this bot will use for chat and document processing.</p>
+<hr>
+
+<div class="field">
+    <label class="label" for="default_model">
+        <span class="icon-text">
+            <span class="icon"><i class="fas fa-brain"></i></span>
+            <span>Default Chat Model</span>
+        </span>
+    </label>
+    <div class="control">
+        <div class="select is-fullwidth is-medium">
+            <select name="default_model" id="default_model">
+                {% for model in chatModels %}
+                    <option value="{{ model.id }}" {{ model.id == bot.default_model ? 'selected' : '' }}>
+                        {{ model.id }}
+                    </option>
+                {% else %}
+                    <option value="">No chat models available</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <p class="help">This model will handle all general chat conversations and responses for this bot.</p>
+</div>
+
+{% if chatModels|length > 0 %}
+<div class="notification is-info is-light mt-5">
+    <h5 class="title is-6">
+        <span class="icon-text">
+            <span class="icon"><i class="fas fa-info-circle"></i></span>
+            <span>Model Information</span>
+        </span>
+    </h5>
+    <div class="content is-small">
+        <ul>
+            <li><strong>Performance:</strong> Different models have varying capabilities, response speeds, and costs.</li>
+            <li><strong>Context:</strong> Some models handle longer conversations better than others.</li>
+            <li><strong>Switching:</strong> You can change the model anytime. Changes will apply to new conversations.</li>
+        </ul>
+    </div>
+</div>
+{% endif %} 

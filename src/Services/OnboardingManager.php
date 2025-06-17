@@ -19,10 +19,10 @@ class OnboardingManager
      * Gets the next onboarding question for a given room.
      *
      * @param array $roomConfig The current configuration of the room.
-     * @param array $globalSettings The global bot settings.
+     * @param array $botSettings The settings for the active bot.
      * @return array A dictionary with 'question' and 'is_done'.
      */
-    public function getNextQuestion(array $roomConfig, array $globalSettings): array
+    public function getNextQuestion(array $roomConfig, array $botSettings): array
     {
         $stage = $roomConfig['meta']['stage'] ?? 0;
         $isGroup = $roomConfig['is_group'] ?? true;
@@ -36,10 +36,10 @@ class OnboardingManager
             case 1:
                 return ['question' => "Should I respond to every message, or only when I'm mentioned? (Please answer with 'always' or 'on_mention')", 'is_done' => false];
             default:
-                // Handle custom questions from admin panel
+                // Handle custom questions from the bot's settings
                 $customQuestionsRaw = $isGroup 
-                    ? ($globalSettings['onboarding_group_questions'] ?? '[]')
-                    : ($globalSettings['onboarding_dm_questions'] ?? '[]');
+                    ? ($botSettings['onboarding_group_questions'] ?? '[]')
+                    : ($botSettings['onboarding_dm_questions'] ?? '[]');
                 
                 // Add debug logging
                 error_log("OnboardingManager: customQuestionsRaw=" . var_export($customQuestionsRaw, true));

@@ -1,0 +1,58 @@
+<h3 class="title is-4">Onboarding Configuration</h3>
+<p class="subtitle is-6">Configure the bot's mention name and the questions it asks new users.</p>
+<hr>
+
+<div class="field">
+    <label class="label" for="mention_name">
+        <span class="icon-text">
+            <span class="icon"><i class="fas fa-at"></i></span>
+            <span>Bot Mention Name</span>
+        </span>
+    </label>
+    <div class="control has-icons-left">
+        <input class="input is-medium" type="text" name="mention_name" id="mention_name" 
+               value="{{ bot.mention_name }}" placeholder="@mybot" pattern="^@.*$" required>
+        <span class="icon is-small is-left">
+            <i class="fas fa-at"></i>
+        </span>
+    </div>
+    <p class="help">Users must use this name to interact with the bot. It must be unique and start with '@'.</p>
+</div>
+
+<hr>
+
+<h4 class="title is-5 mt-5">Onboarding Questions</h4>
+<p class="subtitle is-6">These questions are asked sequentially when a user first interacts with the bot.</p>
+
+<div class="columns">
+    <div class="column">
+        <div class="field">
+            <label class="label">
+                <span class="icon-text">
+                    <span class="icon"><i class="fas fa-users"></i></span>
+                    <span>Group Chat Questions</span>
+                </span>
+            </label>
+            <div class="control">
+                <textarea class="textarea is-medium" name="group_questions" id="groupQuestions" 
+                          rows="6" placeholder="What topics are you interested in learning about?&#10;How can I help your team today?">{{ bot.onboarding_group_questions }}</textarea>
+            </div>
+            <p class="help">One question per line. Asked in new group chats.</p>
+        </div>
+    </div>
+    <div class="column">
+        <div class="field">
+            <label class="label">
+                <span class="icon-text">
+                    <span class="icon"><i class="fas fa-user"></i></span>
+                    <span>Direct Message Questions</span>
+                </span>
+            </label>
+            <div class="control">
+                <textarea class="textarea is-medium" name="dm_questions" id="dmQuestions" 
+                          rows="6" placeholder="What would you like to learn about today?&#10;How can I assist you with your research?">{{ bot.onboarding_dm_questions }}</textarea>
+            </div>
+             <p class="help">One question per line. Asked in new DMs.</p>
+        </div>
+    </div>
+</div> 

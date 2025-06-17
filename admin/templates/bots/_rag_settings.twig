@@ -1,0 +1,74 @@
+<h3 class="title is-4">RAG Settings</h3>
+<p class="subtitle is-6">Configure how the bot processes and retrieves information from its documents.</p>
+<hr>
+
+<div class="columns">
+    <div class="column is-half">
+        <div class="field">
+            <label class="label" for="embedding_model">
+                <span class="icon-text">
+                    <span class="icon"><i class="fas fa-atom"></i></span>
+                    <span>Embedding Model</span>
+                </span>
+            </label>
+            <div class="control">
+                <div class="select is-fullwidth is-medium">
+                    <select name="embedding_model" id="embedding_model">
+                        {% for model in embeddingModels %}
+                            <option value="{{ model.id }}" {{ model.id == bot.embedding_model ? 'selected' : '' }}>
+                                {{ model.id }}
+                            </option>
+                        {% else %}
+                             <option value="e5-mistral-7b-instruct" {{ 'e5-mistral-7b-instruct' == bot.embedding_model ? 'selected' : '' }}>e5-mistral-7b-instruct (default)</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <p class="help">Model used to create numerical representations of document chunks.</p>
+        </div>
+
+        <div class="field">
+            <label class="label" for="rag_top_k">
+                <span class="icon-text">
+                    <span class="icon"><i class="fas fa-sort-amount-up"></i></span>
+                    <span>Top-K Results</span>
+                </span>
+            </label>
+            <div class="control">
+                <input class="input is-medium" type="number" name="rag_top_k" id="rag_top_k" 
+                       value="{{ bot.rag_top_k }}" min="1" max="20" step="1">
+            </div>
+            <p class="help">Max number of relevant chunks to retrieve. (Recommended: 3-5)</p>
+        </div>
+    </div>
+
+    <div class="column is-half">
+        <div class="field">
+            <label class="label" for="rag_chunk_size">
+                <span class="icon-text">
+                    <span class="icon"><i class="fas fa-file-word"></i></span>
+                    <span>Chunk Size (words)</span>
+                </span>
+            </label>
+            <div class="control">
+                <input class="input is-medium" type="number" name="rag_chunk_size" id="rag_chunk_size" 
+                       value="{{ bot.rag_chunk_size }}" min="50" max="1000" step="25">
+            </div>
+            <p class="help">Target size for text chunks when splitting documents. (Recommended: 200-300)</p>
+        </div>
+        
+        <div class="field">
+            <label class="label" for="rag_chunk_overlap">
+                <span class="icon-text">
+                    <span class="icon"><i class="fas fa-object-group"></i></span>
+                    <span>Chunk Overlap (words)</span>
+                </span>
+            </label>
+            <div class="control">
+                <input class="input is-medium" type="number" name="rag_chunk_overlap" id="rag_chunk_overlap" 
+                       value="{{ bot.rag_chunk_overlap }}" min="0" max="100" step="5">
+            </div>
+            <p class="help">Words that overlap between chunks. (Recommended: 10-25)</p>
+        </div>
+    </div>
+</div> 

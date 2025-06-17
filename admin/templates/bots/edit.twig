@@ -1,0 +1,74 @@
+{% extends "layout.twig" %}
+
+{% block title %}Edit {{ bot.bot_name }}{% endblock %}
+{% block heading %}Editing: {{ bot.bot_name }}{% endblock %}
+
+{% block content %}
+<form action="{{ url_for('bots.update', {'id': bot.id}) }}" method="post" id="botEditForm">
+    <div class="tabs is-boxed">
+        <ul>
+            <li class="is-active" data-tab="prompt"><a><span class="icon is-small"><i class="fas fa-terminal"></i></span><span>Prompt</span></a></li>
+            <li data-tab="models"><a><span class="icon is-small"><i class="fas fa-robot"></i></span><span>Models</span></a></li>
+            <li data-tab="onboarding"><a><span class="icon is-small"><i class="fas fa-handshake"></i></span><span>Onboarding</span></a></li>
+            <li data-tab="rag"><a><span class="icon is-small"><i class="fas fa-cogs"></i></span><span>RAG Settings</span></a></li>
+        </ul>
+    </div>
+
+    <!-- System Prompt Tab -->
+    <div class="box tab-content" id="tab-prompt">
+        {% include 'bots/_prompt.twig' %}
+    </div>
+
+    <!-- Models Tab -->
+    <div class="box tab-content" id="tab-models" style="display: none;">
+        {% include 'bots/_models.twig' %}
+    </div>
+
+    <!-- Onboarding Tab -->
+    <div class="box tab-content" id="tab-onboarding" style="display: none;">
+        {% include 'bots/_onboarding.twig' %}
+    </div>
+
+    <!-- RAG Settings Tab -->
+    <div class="box tab-content" id="tab-rag" style="display: none;">
+        {% include 'bots/_rag_settings.twig' %}
+    </div>
+
+    <div class="field mt-5">
+        <div class="control">
+            <button class="button is-primary is-medium" type="submit" id="saveBtn">
+                <span class="icon"><i class="fas fa-save"></i></span>
+                <span>Save All Settings</span>
+            </button>
+            <a href="{{ url_for('bots.index') }}" class="button is-light is-medium ml-3">
+                <span class="icon"><i class="fas fa-arrow-left"></i></span>
+                <span>Back to Bots List</span>
+            </a>
+        </div>
+    </div>
+</form>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const tabs = document.querySelectorAll('.tabs li');
+    const tabContent = document.querySelectorAll('.tab-content');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const target = tab.dataset.tab;
+
+            tabs.forEach(t => t.classList.remove('is-active'));
+            tab.classList.add('is-active');
+
+            tabContent.forEach(content => {
+                if (content.id === `tab-${target}`) {
+                    content.style.display = 'block';
+                } else {
+                    content.style.display = 'none';
+                }
+            });
+        });
+    });
+});
+</script>
+{% endblock %} 

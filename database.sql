@@ -1,5 +1,5 @@
 -- PostgreSQL schema for the Nextcloud AI Chatbot
--- This schema is based on the NEXTCLOUD_AI_CHATBOT_IMPLEMENTATION_PLAN.md
+-- This schema is based on the MULTI_BOT_PLAN.md
 
 -- Ensure the pgvector extension is available. The deployment system should have this enabled.
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -11,11 +11,11 @@ CREATE TABLE IF NOT EXISTS bot_admin (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Stores global settings for the chatbot.
--- It's a singleton table, ensuring only one row of settings exists.
-CREATE TABLE IF NOT EXISTS bot_settings (
-  id INTEGER PRIMARY KEY CHECK (id=1),
-  mention_name TEXT DEFAULT '@educai',
+-- Stores configuration for each individual bot.
+CREATE TABLE IF NOT EXISTS bots (
+  id SERIAL PRIMARY KEY,
+  bot_name TEXT NOT NULL,
+  mention_name TEXT UNIQUE NOT NULL,
   default_model TEXT DEFAULT 'meta-llama-3.1-8b-instruct',
   system_prompt TEXT,
   onboarding_group_questions JSONB,
@@ -23,12 +23,15 @@ CREATE TABLE IF NOT EXISTS bot_settings (
   embedding_model TEXT DEFAULT 'e5-mistral-7b-instruct',
   rag_top_k INTEGER DEFAULT 3,
   rag_chunk_size INTEGER DEFAULT 250,
-  rag_chunk_overlap INTEGER DEFAULT 25
+  rag_chunk_overlap INTEGER DEFAULT 25,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Stores metadata about uploaded documents for RAG.
 CREATE TABLE IF NOT EXISTS bot_docs (
   id SERIAL PRIMARY KEY,
+  bot_id INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
   filename TEXT NOT NULL,
   path TEXT NOT NULL,
   checksum CHAR(64) UNIQUE NOT NULL, -- SHA-256 checksum to prevent duplicates
@@ -50,6 +53,7 @@ CREATE TABLE IF NOT EXISTS bot_embeddings (
 -- Stores the history of all conversations.
 CREATE TABLE IF NOT EXISTS bot_conversations (
   id BIGSERIAL PRIMARY KEY,
+  bot_id INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
   room_token TEXT NOT NULL,
   user_id TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant')), -- Enforces valid roles
@@ -60,6 +64,7 @@ CREATE TABLE IF NOT EXISTS bot_conversations (
 -- Stores configuration for each Nextcloud Talk room.
 CREATE TABLE IF NOT EXISTS bot_room_config (
   room_token TEXT PRIMARY KEY,
+  bot_id INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
   is_group BOOLEAN NOT NULL,
   mention_mode TEXT NOT NULL CHECK (mention_mode IN ('always', 'on_mention')),
   onboarding_done BOOLEAN DEFAULT FALSE,

@@ -1,0 +1,49 @@
+{% extends "layout.twig" %}
+
+{% block title %}Create New Bot{% endblock %}
+{% block heading %}Create New Bot{% endblock %}
+
+{% block content %}
+<div class="box">
+    <form action="{{ url_for('bots.store') }}" method="post">
+        <div class="field">
+            <label class="label" for="bot_name">Bot Name</label>
+            <div class="control">
+                <input class="input" type="text" id="bot_name" name="bot_name" placeholder="e.g., Research Assistant" required>
+            </div>
+            <p class="help">A friendly, recognizable name for your bot.</p>
+        </div>
+
+        <div class="field">
+            <label class="label" for="mention_name">Mention Name</label>
+            <div class="control has-icons-left">
+                <input class="input" type="text" id="mention_name" name="mention_name" placeholder="e.g., @researchbot" required pattern="^@.*$">
+                <span class="icon is-small is-left">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                        <path d="M12 11a4 4 0 100-8 4 4 0 000 8zM18 21a3 3 0 100-6 3 3 0 000 6z"/>
+                    </svg>
+                </span>
+            </div>
+            <p class="help">The unique name used to mention the bot in chats. Must start with '@'.</p>
+        </div>
+
+        <div class="field is-grouped">
+            <div class="control">
+                <button type="submit" class="button is-primary">
+                    <span class="icon">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                           <line x1="12" y1="5" x2="12" y2="19"/>
+                           <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                    </span>
+                    <span>Create Bot</span>
+                </button>
+            </div>
+            <div class="control">
+                <a href="{{ url_for('bots.index') }}" class="button is-light">Cancel</a>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %} 
