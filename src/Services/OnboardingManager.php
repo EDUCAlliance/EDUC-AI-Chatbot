@@ -67,7 +67,9 @@ class OnboardingManager
                 // End of onboarding
                 error_log("OnboardingManager: ending onboarding for room " . $roomConfig['room_token']);
                 $this->markOnboardingAsDone($roomConfig['room_token']);
-                return ['question' => "Thanks for setting me up! I'm ready to help.", 'is_done' => true];
+                
+                $completionMessage = $globalSettings['onboarding_completion_message'] ?? "Thanks for setting me up! I'm ready to help.";
+                return ['question' => $completionMessage, 'is_done' => true];
         }
     }
 

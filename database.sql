@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS bots (
   system_prompt TEXT,
   onboarding_group_questions JSONB,
   onboarding_dm_questions JSONB,
+  onboarding_completion_message TEXT DEFAULT 'Thanks for setting me up! I''m ready to help.',
   embedding_model TEXT DEFAULT 'e5-mistral-7b-instruct',
   rag_top_k INTEGER DEFAULT 3,
   rag_chunk_size INTEGER DEFAULT 250,

@@ -80,6 +80,7 @@ function performMultiBotMigration($db, $logger) {
                   system_prompt TEXT,
                   onboarding_group_questions JSONB,
                   onboarding_dm_questions JSONB,
+                  onboarding_completion_message TEXT DEFAULT 'Thanks for setting me up! I''m ready to help.',
                   embedding_model TEXT DEFAULT 'e5-mistral-7b-instruct',
                   rag_top_k INTEGER DEFAULT 3,
                   rag_chunk_size INTEGER DEFAULT 250,
@@ -102,9 +103,9 @@ function performMultiBotMigration($db, $logger) {
                 // Create default bot from existing settings
                 $stmt = $db->prepare("
                     INSERT INTO bots (bot_name, mention_name, default_model, system_prompt, 
-                                    onboarding_group_questions, onboarding_dm_questions, 
+                                    onboarding_group_questions, onboarding_dm_questions, onboarding_completion_message,
                                     embedding_model, rag_top_k, rag_chunk_size, rag_chunk_overlap) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 
                 $stmt->execute([
@@ -114,6 +115,7 @@ function performMultiBotMigration($db, $logger) {
                     $settings['system_prompt'],
                     $settings['onboarding_group_questions'],
                     $settings['onboarding_dm_questions'],
+                    'Thanks for setting me up! I\'m ready to help.',
                     $settings['embedding_model'] ?: 'e5-mistral-7b-instruct',
                     $settings['rag_top_k'] ?: 3,
                     $settings['rag_chunk_size'] ?: 250,
@@ -204,6 +206,9 @@ try {
     $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_top_k INTEGER DEFAULT 3");
     $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_chunk_size INTEGER DEFAULT 250");
     $db->exec("ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS rag_chunk_overlap INTEGER DEFAULT 25");
+    
+    // Add onboarding completion message to bots table
+    $db->exec("ALTER TABLE bots ADD COLUMN IF NOT EXISTS onboarding_completion_message TEXT DEFAULT 'Thanks for setting me up! I''m ready to help.'");
     
     // Add processing status column to bot_docs
     $db->exec("ALTER TABLE bot_docs ADD COLUMN IF NOT EXISTS processing_status TEXT DEFAULT 'completed'");
@@ -420,6 +425,7 @@ $app->post('/bots/{id}/settings', function (Request $request, Response $response
             system_prompt = ?, 
             onboarding_group_questions = ?, 
             onboarding_dm_questions = ?, 
+            onboarding_completion_message = ?,
             embedding_model = ?, 
             rag_top_k = ?, 
             rag_chunk_size = ?, 
@@ -444,6 +450,7 @@ $app->post('/bots/{id}/settings', function (Request $request, Response $response
         $data['system_prompt'] ?? '',
         $groupQuestions,
         $dmQuestions,
+        $data['onboarding_completion_message'] ?? 'Thanks for setting me up! I\'m ready to help.',
         $data['embedding_model'] ?? 'e5-mistral-7b-instruct',
         (int)($data['rag_top_k'] ?? 3),
         (int)($data['rag_chunk_size'] ?? 250),

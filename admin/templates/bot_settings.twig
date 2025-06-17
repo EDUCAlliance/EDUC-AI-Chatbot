@@ -178,6 +178,15 @@
 
                 <!-- Onboarding Tab -->
                 <div class="tab-pane" id="onboarding">
+                    <div class="field">
+                        <label class="label">Completion Message</label>
+                        <div class="control">
+                            <textarea class="textarea is-medium" name="onboarding_completion_message" rows="3" 
+                                      placeholder="Thanks for setting me up! I'm ready to help.">{{ bot.onboarding_completion_message }}</textarea>
+                        </div>
+                        <p class="help">Message displayed when onboarding is completed.</p>
+                    </div>
+
                     <div class="columns">
                         <div class="column">
                             <div class="field">
