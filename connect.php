@@ -96,57 +96,43 @@ if (empty($message) || empty($roomToken) || empty($userId)) {
     exit('Missing required fields.');
 }
 
-// --- Bot Detection and Room Configuration ---
-$activeBot = null;
-$roomConfig = null;
-
+// --- Check for Bot Mention (early exit if not mentioned) ---
 try {
-    // Check if the room is already configured
-    $stmt = $db->prepare("SELECT * FROM bot_room_config WHERE room_token = ?");
-    $stmt->execute([$roomToken]);
-    $roomConfig = $stmt->fetch();
-
-    if ($roomConfig && $roomConfig['bot_id']) {
-        // Room is already configured for a specific bot
-        $botStmt = $db->prepare("SELECT * FROM bots WHERE id = ?");
-        $botStmt->execute([$roomConfig['bot_id']]);
-        $activeBot = $botStmt->fetch();
-        $logger->info('Room already configured for bot.', ['bot_id' => $activeBot['id'], 'mention_name' => $activeBot['mention_name']]);
-    } else {
-        // New room or re-onboarding: Find which bot is being mentioned
-        $allBots = $db->query("SELECT * FROM bots ORDER BY LENGTH(mention_name) DESC")->fetchAll();
-        foreach ($allBots as $bot) {
-            if (stripos($message, $bot['mention_name']) !== false) {
-                $activeBot = $bot;
-                $logger->info('Detected mention for a bot.', ['bot_id' => $activeBot['id'], 'mention_name' => $activeBot['mention_name']]);
-                break;
-            }
-        }
-    }
+    $settingsStmt = $db->query("SELECT mention_name FROM bot_settings WHERE id = 1");
+    $settings = $settingsStmt->fetch();
+    $botMention = $settings['mention_name'] ?? '@educai';
 } catch (\PDOException $e) {
-    $logger->error('Failed during bot detection or room config fetching', ['error' => $e->getMessage()]);
-    http_response_code(500);
-    exit('Database error.');
+    $logger->error('Failed to fetch bot mention setting', ['error' => $e->getMessage()]);
+    $botMention = '@educai'; // Fallback to default
 }
 
-// If no bot is mentioned in a new chat, or the configured bot isn't mentioned when required, exit.
-if (!$activeBot) {
-    $logger->info('No active bot could be determined for this message. Exiting.');
-    http_response_code(200);
-    exit('No relevant bot found or mentioned.');
-}
+// Remove @ if present in the stored mention
+$mentionName = ltrim($botMention, '@');
 
-// Re-check mention requirement
-$shouldCheckMention = false;
-if ($roomConfig && $roomConfig['onboarding_done']) {
-    $shouldCheckMention = ($roomConfig['mention_mode'] ?? 'on_mention') === 'on_mention';
-} elseif (!$roomConfig) {
-    // First contact always requires a mention
+$logger->info('Checking for bot mention', [
+    'botMention' => $botMention,
+    'mentionName' => $mentionName,
+    'message' => $message
+]);
+
+$roomConfigStmt = $db->prepare("SELECT mention_mode, onboarding_done FROM bot_room_config WHERE room_token = ?");
+$roomConfigStmt->execute([$roomToken]);
+$roomConfigInfo = $roomConfigStmt->fetch();
+
+// Determine whether the bot should enforce mention for THIS message
+$shouldCheckMention = false; // default: no mention required
+
+if (!$roomConfigInfo) {
+    // First ever contact in this room -> mention required
     $shouldCheckMention = true;
+} elseif ($roomConfigInfo['onboarding_done']) {
+    // Onboarding finished – respect the configured mention mode
+    $shouldCheckMention = ($roomConfigInfo['mention_mode'] ?? 'on_mention') === 'on_mention';
 }
 
-if ($shouldCheckMention && stripos($message, $activeBot['mention_name']) === false) {
-    $logger->info('Bot not mentioned, ignoring message', ['message' => $message, 'required_mention' => $activeBot['mention_name']]);
+// If mention is required but not present, exit early
+if ($shouldCheckMention && stripos($message, '@' . $mentionName) === false) {
+    $logger->info('Bot not mentioned, ignoring message', ['message' => $message, 'required_mention' => $botMention]);
     http_response_code(200);
     exit('Bot not mentioned.');
 }
@@ -184,37 +170,136 @@ if (stripos($message, '((RESET))') !== false) {
 // ---------------------------------------------------------------------------
 
 // --- 3. Room Configuration & Onboarding ---
-if (!$roomConfig) {
-    // Create new room config for the detected bot
-    $logger->info('No room config found, starting onboarding for bot.', ['roomToken' => $roomToken, 'bot_id' => $activeBot['id']]);
+try {
+    $stmt = $db->prepare("SELECT * FROM bot_room_config WHERE room_token = ?");
+    $stmt->execute([$roomToken]);
+    $roomConfig = $stmt->fetch();
+} catch (\PDOException $e) {
+    $logger->error('Failed to fetch room config', ['error' => $e->getMessage(), 'roomToken' => $roomToken]);
+    $roomConfig = false; // Will trigger creation of new config
+}
+
+// Function to send a reply to Nextcloud Talk
+function sendReply(string $message, string $roomToken, int $replyToId, string $ncUrl, string $secret, Logger $logger) {
+    $apiUrl = 'https://' . $ncUrl . '/ocs/v2.php/apps/spreed/api/v1/bot/' . $roomToken . '/message';
+    $requestBody = [
+        'message' => $message,
+        'referenceId' => bin2hex(random_bytes(32)), // Use longer reference ID as per docs
+        'replyTo' => $replyToId,
+        'silent' => false // Explicit silent parameter
+    ];
+    $jsonBody = json_encode($requestBody);
+    $random = bin2hex(random_bytes(32));
+    $hash = hash_hmac('sha256', $random . $requestBody['message'], $secret);
     
-    $isGroup = true; // Default, will be asked in onboarding
+    $logger->info('Sending reply to Nextcloud', [
+        'apiUrl' => $apiUrl,
+        'roomToken' => $roomToken,
+        'replyToId' => $replyToId,
+        'messagePreview' => substr($message, 0, 100) . (strlen($message) > 100 ? '...' : ''),
+        'fullMessage' => $message,
+        'messageLength' => strlen($message),
+        'requestBody' => $requestBody
+    ]);
+    
+    $ch = curl_init($apiUrl);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonBody);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json',
+        'OCS-APIRequest: true',
+        'X-Nextcloud-Talk-Bot-Random: ' . $random,
+        'X-Nextcloud-Talk-Bot-Signature: ' . $hash,
+    ]);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+    
+    if ($curlError) {
+        $logger->error('cURL error when sending reply', ['error' => $curlError]);
+        return false;
+    }
+    
+    if ($httpCode >= 400) {
+        $logger->error('Failed to send reply to Nextcloud', [
+            'code' => $httpCode, 
+            'response' => $response,
+            'requestBody' => $requestBody,
+            'jsonBody' => $jsonBody
+        ]);
+        return false;
+    } else {
+        $logger->info('Successfully sent reply to Nextcloud.', [
+            'httpCode' => $httpCode,
+            'messageLength' => strlen($message),
+            'response' => $response
+        ]);
+        return true;
+    }
+}
+
+// If no config, start onboarding
+if (!$roomConfig) {
+    $logger->info('No room config found, starting onboarding', ['roomToken' => $roomToken]);
+    
+    // Try to determine if this is a group chat or direct message
+    // This is a heuristic - in real scenarios you might need to call Nextcloud API to get room info
+    $isGroup = true; // Default to group chat
+    $roomName = $data['target']['name'] ?? '';
+    
+    // If room name looks like a direct message (e.g., contains user names), treat as DM
+    // This is simplified logic - you might want to enhance this based on your needs
+    if (strpos($roomName, ', ') === false && !empty($roomName)) {
+        // Might be a direct message if no comma in name (single user)
+        $logger->info('Detected potential direct message', ['roomName' => $roomName]);
+    }
+    
+    // Create initial record - use the correct database schema
     $meta = ['stage' => 0, 'answers' => []];
     
+    // Ensure boolean values are properly typed for PostgreSQL
+    $isGroupBool = $isGroup ? true : false;
+    $onboardingDoneBool = false;
+    
+    $logger->info('Inserting room config', [
+        'roomToken' => $roomToken,
+        'isGroup' => $isGroupBool,
+        'onboardingDone' => $onboardingDoneBool
+    ]);
+    
     try {
-        $stmt = $db->prepare("INSERT INTO bot_room_config (room_token, bot_id, is_group, mention_mode, onboarding_done, meta) VALUES (?, ?, ?, ?, ?, ?)");
-        $stmt->bindValue(1, $roomToken);
-        $stmt->bindValue(2, $activeBot['id'], \PDO::PARAM_INT);
-        $stmt->bindValue(3, $isGroup, \PDO::PARAM_BOOL);
-        $stmt->bindValue(4, 'on_mention');
-        $stmt->bindValue(5, false, \PDO::PARAM_BOOL);
-        $stmt->bindValue(6, json_encode($meta));
-        $stmt->execute();
+        $stmt = $db->prepare("INSERT INTO bot_room_config (room_token, is_group, mention_mode, onboarding_done, meta) VALUES (?, ?, ?, ?, ?)");
         
-        $roomConfig = [
-            'room_token' => $roomToken,
-            'bot_id' => $activeBot['id'],
-            'is_group' => $isGroup,
-            'mention_mode' => 'on_mention',
-            'onboarding_done' => false,
-            'meta' => $meta
-        ];
-        $logger->info('Successfully created new room config.');
+        // Bind parameters with explicit types for PostgreSQL boolean compatibility
+        $stmt->bindValue(1, $roomToken, \PDO::PARAM_STR);
+        $stmt->bindValue(2, $isGroupBool, \PDO::PARAM_BOOL);
+        $stmt->bindValue(3, 'on_mention', \PDO::PARAM_STR);
+        $stmt->bindValue(4, $onboardingDoneBool, \PDO::PARAM_BOOL);
+        $stmt->bindValue(5, json_encode($meta), \PDO::PARAM_STR);
+        
+        $stmt->execute();
+        $logger->info('Successfully created room config');
     } catch (\PDOException $e) {
-        $logger->error('Failed to create room config', ['error' => $e->getMessage(), 'bot_id' => $activeBot['id']]);
+        $logger->error('Failed to create room config', [
+            'error' => $e->getMessage(),
+            'roomToken' => $roomToken,
+            'isGroup' => $isGroupBool,
+            'onboardingDone' => $onboardingDoneBool
+        ]);
         http_response_code(500);
         exit('Database error creating room config.');
     }
+    $roomConfig = [
+        'room_token' => $roomToken, 
+        'is_group' => $isGroupBool, 
+        'mention_mode' => 'on_mention', 
+        'onboarding_done' => $onboardingDoneBool, 
+        'meta' => $meta
+    ];
 } else {
     $roomConfig['meta'] = json_decode($roomConfig['meta'], true);
 }
@@ -224,36 +309,131 @@ $logger->info('Room config loaded', [
     'onboardingDone' => $roomConfig['onboarding_done']
 ]);
 
-// --- Onboarding Logic ---
 if ($roomConfig['onboarding_done'] == false) {
-    $logger->info('Processing onboarding for room', ['roomToken' => $roomToken, 'bot_id' => $activeBot['id'], 'message' => $message]);
+    $logger->info('Processing onboarding for room', ['roomToken' => $roomToken, 'message' => $message]);
 
+    // -------------- REUSE FLOW HANDLING ------------------
+    if (($roomConfig['is_group'] ?? true) === false) {
+        // Direct Message room – check if we are in the reuse confirmation sub-flow
+        $reuseState = $roomConfig['meta']['reuse_state'] ?? null;
+        if ($reuseState === 'pending') {
+            $answer = strtolower(trim($message));
+            if (in_array($answer, ['use', 'yes', 'y'])) {
+                // User chose to reuse previous settings
+                $reuseData = $roomConfig['meta']['reuse_data'] ?? [];
+                $roomConfig['mention_mode'] = $reuseData['mention_mode'] ?? $roomConfig['mention_mode'];
+                $roomConfig['meta']['answers'] = $reuseData['answers'] ?? [];
+                $roomConfig['meta']['reuse_state'] = 'accepted';
+                // Mark onboarding as done
+                $roomConfig['onboarding_done'] = true;
+                // Persist changes
+                $stmt = $db->prepare("UPDATE bot_room_config SET mention_mode = :mention_mode, meta = :meta, onboarding_done = TRUE WHERE room_token = :room_token");
+                $stmt->execute([
+                    ':mention_mode' => $roomConfig['mention_mode'],
+                    ':meta' => json_encode($roomConfig['meta']),
+                    ':room_token' => $roomConfig['room_token']
+                ]);
+
+                $replyText = "✅ Previous onboarding answers applied. I'm ready to help you now!";
+                sendReply($replyText, $roomToken, $messageId, $ncUrl, $secret, $logger);
+                exit;
+            } elseif (in_array($answer, ['reset', 'no', 'n'])) {
+                // User wants to reset – discard reuse data and continue fresh onboarding (stage 1)
+                $roomConfig['meta']['reuse_state'] = 'declined';
+                unset($roomConfig['meta']['reuse_data']);
+                // Persist meta update only
+                $stmt = $db->prepare("UPDATE bot_room_config SET meta = :meta WHERE room_token = :room_token");
+                $stmt->execute([
+                    ':meta' => json_encode($roomConfig['meta']),
+                    ':room_token' => $roomConfig['room_token']
+                ]);
+                // Continue with normal onboarding below
+            } else {
+                // Ask again if unclear
+                sendReply("Please reply with 'use' to reuse your previous settings or 'reset' to start over.", $roomToken, $messageId, $ncUrl, $secret, $logger);
+                exit;
+            }
+        }
+    }
+    // -------------- END REUSE FLOW HANDLING --------------
+
+    // Determine current onboarding stage (may have been updated in a previous run)
     $currentStage = $roomConfig['meta']['stage'] ?? 0;
+
+    // --- FIRST QUESTION HANDLING ---
+    // When stage is 0 and we have not yet asked the very first question, do so now and mark it asked.
     $firstAsked = $roomConfig['meta']['first_question_asked'] ?? false;
+    if ($currentStage === 0 && $firstAsked === false) {
+        $settingsStmt = $db->query("SELECT * FROM bot_settings WHERE id = 1");
+        $globalSettings = $settingsStmt->fetch() ?: [];
+        $nextStep = $onboardingManager->getNextQuestion($roomConfig, $globalSettings);
 
-    // If this is the very first interaction (stage 0 and we haven't asked anything yet),
-    // we should just ask the first question and exit. We don't process an answer yet.
-    if ($currentStage === 0 && !$firstAsked) {
-        $nextStep = $onboardingManager->getNextQuestion($roomConfig, $activeBot);
-
-        // Mark that we are asking the first question
+        // Mark that we already asked the first question so we don't repeat it.
         $roomConfig['meta']['first_question_asked'] = true;
-        $stmtUpdateMeta = $db->prepare("UPDATE bot_room_config SET meta = :meta WHERE room_token = :room_token");
-        $stmtUpdateMeta->execute([':meta' => json_encode($roomConfig['meta']), ':room_token' => $roomToken]);
+        $stmtUpdateFirst = $db->prepare("UPDATE bot_room_config SET meta = :meta WHERE room_token = :room_token");
+        $stmtUpdateFirst->execute([
+            ':meta' => json_encode($roomConfig['meta']),
+            ':room_token' => $roomConfig['room_token']
+        ]);
 
         $logger->info('Sending first onboarding question', ['question' => $nextStep['question']]);
-        sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
+        $success = sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
+        if (!$success) {
+            $logger->error('Failed to send onboarding reply');
+        }
         exit;
     }
+    // --- END FIRST QUESTION HANDLING ---
 
-    // For all subsequent onboarding messages, we first process the user's answer
-    $onboardingManager->processAnswer($roomConfig, $message); // This function advances the stage internally
+    // For all subsequent steps we first *process* the previous answer
+    $onboardingManager->processAnswer($roomConfig, $message);
 
-    // Then, we get the next question (or completion message)
-    $nextStep = $onboardingManager->getNextQuestion($roomConfig, $activeBot);
+    // AFTER processing answer, check if we've just identified a DM and should search for previous onboarding data
+    if (($roomConfig['is_group'] ?? true) === false && $roomConfig['meta']['stage'] === 1 && !isset($roomConfig['meta']['reuse_state'])) {
+        try {
+            // Search for an earlier DM room by the same user that has completed onboarding
+            $sql = "SELECT brc.* FROM bot_room_config brc
+                    JOIN bot_conversations bc ON bc.room_token = brc.room_token AND bc.user_id = :user
+                    WHERE brc.is_group = FALSE AND brc.onboarding_done = TRUE
+                    ORDER BY brc.updated_at DESC LIMIT 1";
+            $stmt = $db->prepare($sql);
+            $stmt->execute([':user' => $userId]);
+            $prevConfig = $stmt->fetch();
+            if ($prevConfig) {
+                $prevMeta = json_decode($prevConfig['meta'], true);
+                $roomConfig['meta']['reuse_state'] = 'pending';
+                $roomConfig['meta']['reuse_data'] = [
+                    'mention_mode' => $prevConfig['mention_mode'],
+                    'answers' => $prevMeta['answers'] ?? []
+                ];
+                // Save meta
+                $stmt2 = $db->prepare("UPDATE bot_room_config SET meta = :meta WHERE room_token = :room_token");
+                $stmt2->execute([
+                    ':meta' => json_encode($roomConfig['meta']),
+                    ':room_token' => $roomConfig['room_token']
+                ]);
 
-    $logger->info('Sending next onboarding step', ['question' => $nextStep['question'], 'is_done' => $nextStep['is_done']]);
-    sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
+                $reuseQuestion = "I found previous onboarding answers for you. Reply 'use' to reuse them or 'reset' to start fresh.";
+                sendReply($reuseQuestion, $roomToken, $messageId, $ncUrl, $secret, $logger);
+                exit;
+            }
+        } catch (\Throwable $e) {
+            $logger->error('Failed to search for previous user config', ['error' => $e->getMessage(), 'user' => $userId]);
+            // Do not exit. Just log the error and fall through to the next question,
+            // making the experience consistent with the 'group' path.
+        }
+    }
+
+    // Get the next question (or completion message)
+    $settingsStmt = $db->query("SELECT * FROM bot_settings WHERE id = 1");
+    $globalSettings = $settingsStmt->fetch() ?: [];
+    $nextStep = $onboardingManager->getNextQuestion($roomConfig, $globalSettings);
+
+    $logger->info('Sending onboarding question', ['question' => $nextStep['question']]);
+    $success = sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
+    if (!$success) {
+        $logger->error('Failed to send onboarding reply');
+    }
     exit;
 }
 
@@ -265,8 +445,10 @@ $stmt = $db->prepare("INSERT INTO bot_conversations (room_token, user_id, role, 
 $stmt->execute([$roomToken, $userId, $message]);
 
 // --- 5. RAG Context ---
-$embeddingModel = $activeBot['embedding_model'] ?? 'e5-mistral-7b-instruct';
-$topK = (int)($activeBot['rag_top_k'] ?? 3);
+$settingsStmt = $db->query("SELECT embedding_model, rag_top_k FROM bot_settings WHERE id = 1");
+$ragSettings = $settingsStmt->fetch();
+$embeddingModel = $ragSettings['embedding_model'] ?? 'e5-mistral-7b-instruct';
+$topK = (int)($ragSettings['rag_top_k'] ?? 3);
 
 $ragContext = '';
 try {
@@ -274,15 +456,17 @@ try {
     $logger->info('Embedding response received', ['hasError' => isset($embeddingResponse['error'])]);
     
     if (!isset($embeddingResponse['error']) && !empty($embeddingResponse['data'][0]['embedding'])) {
-        $similarChunks = $vectorStore->findSimilar($embeddingResponse['data'][0]['embedding'], $topK, $activeBot['id']);
+        $similarChunks = $vectorStore->findSimilar($embeddingResponse['data'][0]['embedding'], $topK);
         $logger->info('Similar chunks found', ['count' => count($similarChunks)]);
         
         if (!empty($similarChunks)) {
             $ragContext = "Here is some context that might be relevant:\n\n---\n" . implode("\n\n", $similarChunks) . "\n---\n\n";
         }
+    } else {
+        $logger->warning('No embedding data received', ['response' => $embeddingResponse]);
     }
 } catch (Exception $e) {
-    $logger->error('Error during RAG context retrieval', ['error' => $e->getMessage()]);
+    $logger->error('Error generating embeddings', ['error' => $e->getMessage()]);
 }
 
 // --- 6. LLM Call ---
@@ -291,25 +475,36 @@ $historyStmt = $db->prepare("SELECT role, content FROM bot_conversations WHERE r
 $historyStmt->execute([$roomToken]);
 $history = array_reverse($historyStmt->fetchAll());
 
-// Get bot-specific settings
-$systemPrompt = $activeBot['system_prompt'];
-$model = $activeBot['default_model'];
+// Fetch system prompt and model
+$settingsStmt = $db->query("SELECT system_prompt, default_model, onboarding_group_questions, onboarding_dm_questions FROM bot_settings WHERE id = 1");
+$globalSettings = $settingsStmt->fetch() ?: [
+    'system_prompt' => 'You are a helpful assistant.', 
+    'default_model' => 'meta-llama-3.1-8b-instruct',
+    'onboarding_group_questions' => '[]',
+    'onboarding_dm_questions' => '[]'
+];
+$systemPrompt = $globalSettings['system_prompt'];
+$model = $globalSettings['default_model'];
 
 // --- Inject Onboarding Context into System Prompt ---
 $onboardingContext = '';
-if ($roomConfig && $roomConfig['onboarding_done']) {
-    $isGroup = (bool) $roomConfig['is_group'];
-    $mentionMode = $roomConfig['mention_mode'];
-    $meta = $roomConfig['meta'] ?? []; // Already decoded
+$stmt = $db->prepare("SELECT is_group, mention_mode, meta FROM bot_room_config WHERE room_token = ? AND onboarding_done = TRUE");
+$stmt->execute([$roomToken]);
+$roomConfigForPrompt = $stmt->fetch();
+
+if ($roomConfigForPrompt) {
+    $isGroup = (bool) $roomConfigForPrompt['is_group'];
+    $mentionMode = $roomConfigForPrompt['mention_mode'];
+    $meta = json_decode($roomConfigForPrompt['meta'], true);
     $answers = $meta['answers'] ?? [];
 
     $onboardingContext .= "\n\n--- User Onboarding Context ---\n";
     $onboardingContext .= "Chat Type: " . ($isGroup ? "Group Chat" : "Direct Message") . "\n";
-    $onboardingContext .= "Bot Interaction Style: " . ($mentionMode === 'always' ? "Respond to every message" : "Respond only when mentioned (" . $activeBot['mention_name'] . ")") . "\n";
+    $onboardingContext .= "Bot Interaction Style: " . ($mentionMode === 'always' ? "Respond to every message" : "Respond only when mentioned (@" . $mentionName . ")") . "\n";
 
     $questionsRaw = $isGroup
-        ? ($activeBot['onboarding_group_questions'] ?? '[]')
-        : ($activeBot['onboarding_dm_questions'] ?? '[]');
+        ? ($globalSettings['onboarding_group_questions'] ?? '[]')
+        : ($globalSettings['onboarding_dm_questions'] ?? '[]');
     $questions = json_decode($questionsRaw, true) ?: [];
 
     if (!empty($answers) && !empty($questions)) {
