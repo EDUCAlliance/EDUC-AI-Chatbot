@@ -348,14 +348,9 @@
                 });
             });
 
-            // Form submission
-            form.addEventListener('submit', function() {
-                saveBtn.classList.add('is-loading');
-                saveBtn.disabled = true;
-            });
-
             // Track changes for unsaved warning
             let hasChanges = false;
+            let isSubmitting = false;
             const inputs = form.querySelectorAll('input, textarea, select');
             const originalValues = {};
 
@@ -382,9 +377,17 @@
                 });
             });
 
-            // Warn about unsaved changes
+            // Form submission
+            form.addEventListener('submit', function() {
+                isSubmitting = true; // Mark that we're submitting
+                hasChanges = false; // Clear changes flag to prevent beforeunload warning
+                saveBtn.classList.add('is-loading');
+                saveBtn.disabled = true;
+            });
+
+            // Warn about unsaved changes - but NOT when submitting
             window.addEventListener('beforeunload', function(e) {
-                if (hasChanges) {
+                if (hasChanges && !isSubmitting) {
                     e.preventDefault();
                     e.returnValue = '';
                 }
