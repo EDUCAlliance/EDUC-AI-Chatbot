@@ -63,6 +63,28 @@ The bot will POST a JSON payload to your `callback_url`:
 - `replyTo`: The original `message_id` (if provided).
 - `success`: Always `true` if the reply was sent successfully.
 
+## Onboarding
+
+If you are interacting with a bot in a `room_token` for the first time, the bot will initiate an onboarding process to configure itself for that room.
+
+- The first message you send to a new `room_token` will trigger the onboarding.
+- The bot will reply with a series of questions.
+- Your subsequent messages should be direct answers to those questions.
+- Once you have answered all the questions, the onboarding is complete, and the bot will switch to its normal conversational mode.
+
+The onboarding flow is interactive and happens via the same request/callback mechanism. Your client should be prepared to handle a multi-step conversation to complete the setup.
+
+### Example Onboarding Exchange
+
+1.  **Client -> API:** `{"message": "Hello", "room_token": "new-room-456", ...}`
+2.  **API -> Callback:** `{"message": "Is this a group chat or a direct message? (Please answer with 'group' or 'dm')", ...}`
+3.  **Client -> API:** `{"message": "group", "room_token": "new-room-456", ...}`
+4.  **API -> Callback:** `{"message": "Should I respond to every message, or only when I'm mentioned? (Please answer with 'always' or 'on_mention')", ...}`
+5.  ...and so on, until completion.
+6.  **API -> Callback:** `{"message": "Thanks for setting me up! I'm ready to help.", ...}`
+
+After the final message, the next message from the client will be treated as a regular conversation starter.
+
 ## Error Handling
 
 - If authentication fails, you will receive HTTP 401 with `Invalid API key.`
@@ -118,6 +140,6 @@ app.listen(3000, () => console.log('Listening for bot replies on port 3000'));
 
 ## Notes
 
-- Onboarding must be completed in the Nextcloud client before using the API for a given room.
-- The API is stateless and can be used from any client that can receive HTTP POST callbacks.
+- The conversation state, including onboarding progress, is tied to the `room_token`. Use a unique `room_token` for each distinct conversation or chat room.
+- The API is stateless from the perspective of the HTTP connection, but maintains conversation state on the server based on the `room_token`.
 - For advanced usage, refer to the source code in `api.php`. 

@@ -161,13 +161,34 @@ if (!$roomConfig) {
 } else {
     $roomConfig['meta'] = json_decode($roomConfig['meta'], true);
 }
-/*
+
 if ($roomConfig['onboarding_done'] == false) {
-    $logger->info('Onboarding not completed for room', ['roomToken' => $roomToken]);
-    $replyText = "Onboarding is not completed for this room. Please complete onboarding in the Nextcloud client.";
+    $logger->info('Onboarding process started/continued.', [
+        'roomToken' => $roomToken,
+        'stage' => $roomConfig['meta']['stage'] ?? 0
+    ]);
+
+    $stageBeforeProcessing = $roomConfig['meta']['stage'] ?? 0;
+
+    // Process the user's message as an answer to the current onboarding question.
+    // The $onboardingManager updates the room config state internally.
+    $wasValid = $onboardingManager->processAnswer($roomConfig, $message);
+
+    // Get the next question based on the (potentially updated) state.
+    // This method also handles marking the onboarding as complete.
+    $nextQuestionData = $onboardingManager->getNextQuestion($roomConfig, $detectedBot);
+    $replyText = $nextQuestionData['question'];
+
+    // If the user provided an invalid answer for any question beyond the first one, give feedback.
+    // For the very first question (stage 0), we don't show an error for invalid input,
+    // we just repeat the question.
+    if (!$wasValid && $stageBeforeProcessing > 0) {
+        $replyText = "Sorry, I didn't understand that. Let's try again.\n\n" . $replyText;
+    }
+
     sendApiReply($replyText, $callbackUrl, $messageId, $logger);
-    exit;
-}*/
+    exit();
+}
 
 // --- 4. Process Regular Message ---
 $logger->info('Processing regular message', ['roomToken' => $roomToken, 'userId' => $userId, 'message' => $message]);
