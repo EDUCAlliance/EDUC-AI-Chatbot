@@ -849,10 +849,21 @@ $app->post('/documents/delete', function (Request $request, Response $response) 
             $stmt = $db->prepare("DELETE FROM bot_processing_progress WHERE doc_id = ?");
             $stmt->execute([(int)$docId]);
             
+            // Count embeddings before deletion
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM bot_embeddings WHERE doc_id = ?");
+            $countStmt->execute([(int)$docId]);
+            $embeddingCount = $countStmt->fetchColumn();
+            
             // Delete embeddings associated with the document
             $stmt = $db->prepare("DELETE FROM bot_embeddings WHERE doc_id = ?");
-            $stmt->execute([(int)$docId]);
-            $logger->info('Deleted embeddings for document', ['doc_id' => $docId]);
+            $result = $stmt->execute([(int)$docId]);
+            $deletedEmbeddings = $stmt->rowCount();
+            
+            $logger->info('Deleted embeddings for document', [
+                'doc_id' => $docId, 
+                'embeddings_found' => $embeddingCount,
+                'embeddings_deleted' => $deletedEmbeddings
+            ]);
 
             // Delete the document record itself
             $stmt = $db->prepare("DELETE FROM bot_docs WHERE id = ?");
@@ -861,7 +872,10 @@ $app->post('/documents/delete', function (Request $request, Response $response) 
 
             $db->commit();
             
-            $response->getBody()->write(json_encode(['success' => true]));
+            $response->getBody()->write(json_encode([
+                'success' => true,
+                'embeddings_deleted' => $deletedEmbeddings
+            ]));
             return $response->withHeader('Content-Type', 'application/json');
             
         } catch (\Exception $e) {
@@ -900,10 +914,21 @@ $app->post('/documents/delete', function (Request $request, Response $response) 
                 $stmt = $db->prepare("DELETE FROM bot_processing_progress WHERE doc_id = ?");
                 $stmt->execute([(int)$docId]);
                 
+                // Count embeddings before deletion
+                $countStmt2 = $db->prepare("SELECT COUNT(*) FROM bot_embeddings WHERE doc_id = ?");
+                $countStmt2->execute([(int)$docId]);
+                $embeddingCount2 = $countStmt2->fetchColumn();
+                
                 // Delete embeddings associated with the document
                 $stmt = $db->prepare("DELETE FROM bot_embeddings WHERE doc_id = ?");
-                $stmt->execute([(int)$docId]);
-                $logger->info('Deleted embeddings for document', ['doc_id' => $docId]);
+                $result = $stmt->execute([(int)$docId]);
+                $deletedEmbeddings = $stmt->rowCount();
+                
+                $logger->info('Deleted embeddings for document', [
+                    'doc_id' => $docId, 
+                    'embeddings_found' => $embeddingCount2,
+                    'embeddings_deleted' => $deletedEmbeddings
+                ]);
 
                 // Delete the document record itself
                 $stmt = $db->prepare("DELETE FROM bot_docs WHERE id = ?");

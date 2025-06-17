@@ -405,7 +405,17 @@ class DocumentUploader {
 
     showSuccess(stats) {
         this.successMessage.style.display = 'block';
-        this.successDetails.textContent = `Created ${stats?.chunks || 0} text chunks with ${stats?.embeddings || 0} embeddings`;
+        if (stats?.message) {
+            // Delete success message
+            let message = stats.message;
+            if (stats.embeddings_deleted > 0) {
+                message += ` (${stats.embeddings_deleted} embeddings removed)`;
+            }
+            this.successDetails.textContent = message;
+        } else {
+            // Upload success message
+            this.successDetails.textContent = `Created ${stats?.chunks || 0} text chunks with ${stats?.embeddings || 0} embeddings`;
+        }
     }
 
     showError(message) {
@@ -520,7 +530,10 @@ class DocumentUploader {
             if (data.success) {
                 this.removeDocumentFromTable(docId);
                 this.hideDeleteModal();
-                this.showSuccess({ message: 'Document deleted successfully' });
+                this.showSuccess({ 
+                    message: 'Document deleted successfully',
+                    embeddings_deleted: data.embeddings_deleted || 0
+                });
                 
                 // Auto-hide success message after 3 seconds
                 setTimeout(() => this.hideSuccess(), 3000);
