@@ -27,7 +27,7 @@ class ApiClient
      */
     public function getModels(): array
     {
-        return $this->makeRequest('GET', '/models');
+        return $this->makeRequest('POST', '/models');
     }
 
     /**
