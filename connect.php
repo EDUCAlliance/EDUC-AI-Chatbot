@@ -512,8 +512,72 @@ if ($roomConfig['onboarding_done'] == false) {
 $logger->info('Processing regular message', ['roomToken' => $roomToken, 'userId' => $userId, 'message' => $message]);
 
 // Store user message
-$stmt = $db->prepare("INSERT INTO bot_conversations (room_token, user_id, role, content) VALUES (?, ?, 'user', ?)");
-$stmt->execute([$roomToken, $userId, $message]);
+$stmt = $db->prepare("INSERT INTO bot_conversations (room_token, user_id, role, content, bot_id) VALUES (?, ?, 'user', ?, ?)");
+$stmt->execute([$roomToken, $userId, $message, $currentBotId]);
+
+// --- 4.5. Prepare Context for RAG and LLM ---
+$logger->info('Preparing context for RAG and LLM');
+
+// Fetch conversation history (last 10 messages for LLM, 5 for RAG)
+$historyStmt = $db->prepare("SELECT role, content FROM bot_conversations WHERE room_token = ? ORDER BY created_at DESC LIMIT 10");
+$historyStmt->execute([$roomToken]);
+$history = array_reverse($historyStmt->fetchAll());
+
+// Fetch onboarding configuration to use for both RAG context and LLM system prompt
+$onboardingStmt = $db->prepare("SELECT is_group, mention_mode, meta FROM bot_room_config WHERE room_token = ? AND onboarding_done = TRUE");
+$onboardingStmt->execute([$roomToken]);
+$roomConfigForPrompt = $onboardingStmt->fetch();
+
+$onboardingQnAForEmbedding = '';
+if ($roomConfigForPrompt) {
+    $isGroup = (bool) $roomConfigForPrompt['is_group'];
+    $meta = json_decode($roomConfigForPrompt['meta'], true);
+    $answers = $meta['answers'] ?? [];
+
+    $questionsRaw = $isGroup
+        ? ($detectedBot['onboarding_group_questions'] ?? '[]')
+        : ($detectedBot['onboarding_dm_questions'] ?? '[]');
+    $questions = json_decode($questionsRaw, true) ?: [];
+
+    if (!empty($answers) && !empty($questions)) {
+        $qnaParts = [];
+        foreach ($answers as $index => $answer) {
+            if (isset($questions[$index])) {
+                $qnaParts[] = "Q: " . $questions[$index] . "\nA: " . $answer;
+            }
+        }
+        $onboardingQnAForEmbedding = implode("\n\n", $qnaParts);
+    }
+}
+
+// Prepare history for embedding (last 5 messages)
+$historyForEmbedding = array_slice($history, -5);
+$historyTextForEmbedding = '';
+if (!empty($historyForEmbedding)) {
+    $historyLines = [];
+    foreach ($historyForEmbedding as $msg) {
+        // Exclude the current message if it's already in history (it shouldn't be, but as a safeguard)
+        if ($msg['role'] === 'user' && $msg['content'] === $message) {
+            continue;
+        }
+        $historyLines[] = $msg['role'] . ': ' . $msg['content'];
+    }
+    $historyTextForEmbedding = implode("\n", $historyLines);
+}
+
+// Combine all parts for the final embedding text
+$embeddingTextParts = [];
+if (!empty($onboardingQnAForEmbedding)) {
+    $embeddingTextParts[] = "Onboarding context:\n" . $onboardingQnAForEmbedding;
+}
+if (!empty($historyTextForEmbedding)) {
+    $embeddingTextParts[] = "Recent conversation history:\n" . $historyTextForEmbedding;
+}
+// Always add the current user message last, as it's the most important part
+$embeddingTextParts[] = "Current user message:\nuser: " . $message;
+
+$textForEmbedding = implode("\n\n---\n\n", $embeddingTextParts);
+$logger->info('Constructed text for RAG embedding', ['text' => $textForEmbedding]);
 
 // --- 5. RAG Context ---
 // Use the detected bot's settings for RAG
@@ -522,7 +586,8 @@ $topK = (int)($detectedBot['rag_top_k'] ?? 3);
 
 $ragContext = '';
 try {
-    $embeddingResponse = $apiClient->getEmbedding($message, $embeddingModel);
+    // Use the combined text to generate a context-aware embedding
+    $embeddingResponse = $apiClient->getEmbedding($textForEmbedding, $embeddingModel);
     $logger->info('Embedding response received', ['hasError' => isset($embeddingResponse['error'])]);
     
     if (!isset($embeddingResponse['error']) && !empty($embeddingResponse['data'][0]['embedding'])) {
@@ -540,26 +605,15 @@ try {
 }
 
 // --- 6. LLM Call ---
-// Fetch history
-$historyStmt = $db->prepare("SELECT role, content FROM bot_conversations WHERE room_token = ? ORDER BY created_at DESC LIMIT 10");
-$historyStmt->execute([$roomToken]);
-$history = array_reverse($historyStmt->fetchAll());
-
 // Use the detected bot's settings for system prompt and model
 $systemPrompt = $detectedBot['system_prompt'] ?? 'You are a helpful assistant.';
 $model = $detectedBot['default_model'] ?? 'meta-llama-3.1-8b-instruct';
 
 // --- Inject Onboarding Context into System Prompt ---
 $onboardingContext = '';
-$stmt = $db->prepare("SELECT is_group, mention_mode, meta FROM bot_room_config WHERE room_token = ? AND onboarding_done = TRUE");
-$stmt->execute([$roomToken]);
-$roomConfigForPrompt = $stmt->fetch();
-
 if ($roomConfigForPrompt) {
     $isGroup = (bool) $roomConfigForPrompt['is_group'];
     $mentionMode = $roomConfigForPrompt['mention_mode'];
-    $meta = json_decode($roomConfigForPrompt['meta'], true);
-    $answers = $meta['answers'] ?? [];
 
     $onboardingContext .= "\n\n--- User Onboarding Context ---\n";
     $onboardingContext .= "Chat Type: " . ($isGroup ? "Group Chat" : "Direct Message") . "\n";
@@ -612,8 +666,8 @@ try {
 
 // --- 7. Reply ---
 // Store assistant message
-$stmt = $db->prepare("INSERT INTO bot_conversations (room_token, user_id, role, content) VALUES (?, ?, 'assistant', ?)");
-$stmt->execute([$roomToken, 'assistant', $replyContent]);
+$stmt = $db->prepare("INSERT INTO bot_conversations (room_token, user_id, role, content, bot_id) VALUES (?, ?, 'assistant', ?, ?)");
+$stmt->execute([$roomToken, 'assistant', $replyContent, $currentBotId]);
 
 // Send reply to Nextcloud
 $logger->info('Sending final reply', ['replyLength' => strlen($replyContent)]);

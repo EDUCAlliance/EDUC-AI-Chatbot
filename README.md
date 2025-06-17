@@ -1,15 +1,18 @@
 # EDUC AI TalkBot
 
-A sophisticated AI-powered chatbot for Nextcloud Talk with Retrieval-Augmented Generation (RAG) capabilities, featuring a comprehensive admin panel for configuration and document management.
+A sophisticated multi-bot AI-powered chatbot system for Nextcloud Talk with Retrieval-Augmented Generation (RAG) capabilities, featuring a comprehensive admin panel for bot management, configuration, and document knowledge bases.
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Multi-Bot Architecture](#multi-bot-architecture)
+- [RAG System](#rag-system)
 - [Features](#features)
 - [System Requirements](#system-requirements)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Admin Panel](#admin-panel)
+- [Bot Management](#bot-management)
 - [Architecture](#architecture)
 - [API Integration](#api-integration)
 - [Database Schema](#database-schema)
@@ -21,49 +24,122 @@ A sophisticated AI-powered chatbot for Nextcloud Talk with Retrieval-Augmented G
 
 ## Overview
 
-The EDUC AI TalkBot is a comprehensive chatbot solution designed to integrate seamlessly with Nextcloud Talk. It provides intelligent responses using OpenAI's language models enhanced with Retrieval-Augmented Generation (RAG) to answer questions based on your organization's documents and knowledge base.
+The EDUC AI TalkBot is a comprehensive multi-bot chatbot solution designed to integrate seamlessly with Nextcloud Talk. It provides intelligent responses using SAIA/OpenAI's language models enhanced with Retrieval-Augmented Generation (RAG) to answer questions based on your organization's documents and knowledge base.
 
 ### Key Capabilities
 
-- **AI-Powered Conversations**: Utilizes OpenAI's GPT models for natural language understanding and generation
-- **RAG Integration**: Searches and references uploaded documents to provide contextually relevant answers
-- **Document Management**: Upload, process, and manage knowledge base documents
-- **Onboarding System**: Configurable welcome messages and initial questions
+- **Multi-Bot Architecture**: Create and manage multiple specialized bots with unique personalities and knowledge bases
+- **Bot-Specific Knowledge**: Each bot has its own document collection and embeddings for targeted expertise
+- **AI-Powered Conversations**: Utilizes SAIA API (GWDG) models for natural language understanding and generation
+- **Advanced RAG Integration**: Bot-specific semantic search and document retrieval for contextually relevant answers
+- **Intelligent Bot Detection**: Automatic bot assignment based on mention names (@educai, @supportbot, etc.)
+- **Room-Bot Association**: Persistent bot assignments to chat rooms with reset capability
+- **Document Management**: Upload, process, and manage bot-specific knowledge base documents
+- **Configurable Onboarding**: Bot-specific welcome messages, questions, and interaction modes
 - **Multi-Room Support**: Different configurations for group chats vs. direct messages
-- **Admin Dashboard**: Comprehensive web interface for system management
-- **Conversation History**: Maintains context across chat sessions
-- **Vector Search**: Advanced semantic search using pgvector and embedding models
+- **Admin Dashboard**: Comprehensive web interface for multi-bot system management
+- **Conversation History**: Maintains context across chat sessions with bot-specific storage
+- **Vector Search**: Advanced semantic search using pgvector and embedding models with bot isolation
+
+## Multi-Bot Architecture
+
+The system supports multiple specialized bots, each with unique characteristics:
+
+### Bot Isolation & Management
+- **Independent Knowledge Bases**: Each bot maintains separate document collections and embeddings
+- **Unique Personalities**: Individual system prompts, onboarding flows, and interaction styles
+- **Mention-Based Activation**: Users trigger specific bots using custom mention names
+- **Room Assignment**: Rooms are assigned to bots on first interaction, preventing conflicts
+- **Reset Capability**: Special `((RESET))` command clears room association for fresh bot selection
+
+### Bot Detection Flow
+1. **Existing Rooms**: Respond only to the assigned bot's mention name
+2. **New Rooms**: Scan for any bot mention and assign first detected bot
+3. **Cross-Bot Mentions**: Guide users to use reset command if trying to access different bot
+4. **Mention Validation**: Ignore messages without proper bot mentions to prevent spam
+
+### Example Multi-Bot Scenarios
+- **@educai**: General educational assistant with course materials and academic resources
+- **@supportbot**: Technical support specialist with IT documentation and troubleshooting guides
+- **@researchbot**: Research assistant with scientific papers and methodology documents
+- **@adminbot**: Administrative helper with policies, procedures, and institutional knowledge
+
+## RAG System
+
+The Retrieval-Augmented Generation system provides bot-specific, contextual document search and knowledge integration.
+
+### Bot-Specific RAG Architecture
+```
+User Query → Embedding Generation → Bot-Filtered Vector Search → Context Assembly → LLM Generation
+```
+
+### How It Works
+1. **Query Processing**: User message is converted to embeddings using bot's configured embedding model
+2. **Bot-Filtered Search**: Vector similarity search limited to documents belonging to the specific bot
+3. **Context Retrieval**: Top-K most relevant document chunks retrieved based on bot's RAG settings
+4. **Response Generation**: LLM generates response using bot's system prompt + retrieved context + conversation history
+
+### Key RAG Features
+- **Bot Isolation**: Each bot only searches its own document collection
+- **Configurable Models**: Different embedding models per bot (e5-mistral-7b-instruct, etc.)
+- **Tunable Parameters**: Bot-specific top-K results, chunk size, and overlap settings
+- **Semantic Search**: Meaning-based document retrieval, not just keyword matching
+- **Source Attribution**: Responses reference specific documents when appropriate
+
+### RAG Configuration Per Bot
+- **Embedding Model**: Model used for vectorizing documents and queries
+- **Top-K Results**: Number of relevant chunks to retrieve (default: 3)
+- **Chunk Size**: Document chunk size in tokens (default: 250)
+- **Chunk Overlap**: Overlap between chunks for context continuity (default: 25)
+
+### Vector Search Implementation
+```php
+// Bot-specific embedding search
+$similarChunks = $vectorStore->findSimilar(
+    $embeddingResponse['data'][0]['embedding'], 
+    $topK, 
+    $currentBotId  // Filters to bot's documents only
+);
+```
+
+The search uses PostgreSQL's pgvector extension with cosine similarity for efficient semantic matching within each bot's knowledge domain.
 
 ## Features
 
 ### Core Functionality
 
-- **Intelligent Chatbot**: Responds to user queries in Nextcloud Talk rooms
-- **Document-Based Answers**: Searches uploaded documents to provide accurate, source-backed responses
-- **Conversation Memory**: Maintains context within chat sessions
-- **Flexible Model Support**: Compatible with various OpenAI models (GPT-3.5, GPT-4, etc.)
+- **Multi-Bot Intelligence**: Create and manage multiple specialized AI assistants
+- **Bot-Specific Knowledge**: Each bot maintains isolated document collections and embeddings
+- **Intelligent Bot Detection**: Automatic room-bot assignment based on mention patterns
+- **Document-Based Answers**: Bot-filtered document search for accurate, contextual responses
+- **Conversation Memory**: Maintains context within chat sessions with bot-specific storage
+- **Flexible Model Support**: Compatible with various SAIA/OpenAI models per bot
 - **Real-time Processing**: Immediate response to Nextcloud Talk webhooks
+- **Room Reset Capability**: Users can reset room-bot associations with `((RESET))` command
 
 ### Admin Panel Features
 
-- **Dashboard**: Overview of system statistics and health
-- **Document Management**: Upload, view, and delete knowledge base documents
-- **Model Configuration**: Select and configure AI models
-- **System Prompt Editor**: Customize the AI's behavior and personality
-- **Onboarding Setup**: Configure welcome messages, bot mentions, and initial questions
-- **Bot Mention Control**: Set custom mention names to prevent spam and control bot activation
-- **RAG Settings**: Fine-tune retrieval and generation parameters
-- **User Authentication**: Secure access with password protection
-- **Responsive Design**: Works on desktop and mobile devices
+- **Multi-Bot Dashboard**: Overview of all bots with individual statistics
+- **Bot Management**: Create, configure, and delete bots with comprehensive settings
+- **Bot-Specific Documents**: Upload and manage knowledge base documents per bot
+- **Individual Bot Settings**: Unique system prompts, models, and RAG configurations per bot
+- **Advanced Onboarding**: Bot-specific welcome messages, questions, and interaction modes
+- **Mention Name Control**: Configure custom bot mentions (@educai, @supportbot, etc.)
+- **RAG Fine-Tuning**: Per-bot retrieval and generation parameter optimization
+- **User Authentication**: Secure access with password protection and CSRF protection
+- **Responsive Design**: Works seamlessly on desktop and mobile devices
+- **Real-time Processing**: Async document processing with progress tracking
 
 ### Advanced Features
 
-- **Vector Embeddings**: Converts documents into searchable vector representations
-- **Semantic Search**: Finds relevant content based on meaning, not just keywords
-- **Chunking Strategy**: Intelligently splits documents for optimal processing
-- **Duplicate Detection**: Prevents uploading the same document multiple times
-- **Conversation Analytics**: Track usage and performance metrics
-- **Multi-tenant Ready**: Supports multiple Nextcloud instances
+- **Bot Isolation**: Complete separation of bot knowledge bases and configurations
+- **Vector Embeddings**: Bot-specific document vectorization with configurable models
+- **Semantic Search**: Bot-filtered similarity search for contextually relevant content
+- **Intelligent Chunking**: Optimized document splitting with configurable parameters
+- **Duplicate Prevention**: Bot-specific duplicate detection for document uploads
+- **Conversation Analytics**: Track usage and performance metrics per bot
+- **Automatic Migration**: Seamless database schema updates for multi-bot architecture
+- **Progress Tracking**: Real-time embedding generation status with cancellation support
 
 ## System Requirements
 
@@ -303,37 +379,102 @@ Support for multiple SAIA models via GWDG:
 **Embedding Model:**
 - `e5-mistral-7b-instruct` - Document vectorization
 
+## Bot Management
+
+The admin panel provides comprehensive bot creation, configuration, and management capabilities.
+
+### Bot Creation & Configuration
+
+#### Creating New Bots
+1. Navigate to **Bots** section in admin panel
+2. Click **Create New Bot**
+3. Configure basic settings:
+   - **Bot Name**: Display name for admin identification
+   - **Mention Name**: User-facing mention (e.g., @educai, @supportbot)
+   - **Default Model**: AI model for text generation
+   - **System Prompt**: Bot personality and behavior instructions
+
+#### Bot Settings Management
+Each bot has comprehensive configuration options organized in tabs:
+
+**General Settings**:
+- Bot name and mention configuration
+- AI model selection from available SAIA models
+- Custom system prompt for personality and behavior
+
+**Onboarding Configuration**:
+- Group chat welcome questions and flow
+- Direct message onboarding sequence
+- Completion messages and interaction modes
+
+**RAG Settings**:
+- Embedding model selection
+- Retrieval parameters (top-K results, chunk size, overlap)
+- Document processing configuration
+
+### Bot-Specific Document Management
+
+#### Document Upload Process
+1. Select target bot from dropdown
+2. Upload documents (PDF, DOC, DOCX, TXT, MD)
+3. System processes documents with bot-specific settings
+4. Embeddings generated using bot's configured embedding model
+5. Documents become searchable only by that specific bot
+
+#### Document Isolation
+- Each bot maintains completely separate document collections
+- No cross-bot document access or contamination
+- Independent embedding generation and storage
+- Bot-specific duplicate detection
+
+### Room-Bot Assignment
+
+#### Automatic Assignment
+- **New Rooms**: First bot mention automatically assigns bot to room
+- **Existing Rooms**: Room responds only to assigned bot's mentions
+- **Persistent Association**: Room-bot relationship maintained across sessions
+
+#### Manual Reset
+Users can reset room-bot assignment:
+```
+((RESET))
+```
+This command:
+- Clears room configuration and bot assignment
+- Deletes conversation history
+- Allows fresh bot selection on next interaction
+
 ## Admin Panel
 
-The admin panel provides a comprehensive interface for managing the AI chatbot system.
+The admin panel provides a comprehensive interface for managing the multi-bot AI system.
 
 ### Dashboard
 
-![Dashboard Screenshot](docs/images/dashboard.png)
-
-- **System Statistics**: Documents, embeddings, conversations, active rooms
-- **Health Monitoring**: API connectivity, database status
-- **Recent Activity**: Latest conversations and document uploads
-- **Quick Actions**: Direct access to common tasks
+- **Multi-Bot Statistics**: Individual bot metrics and system overview
+- **Health Monitoring**: API connectivity, database status, per-bot performance
+- **Recent Activity**: Latest conversations and document uploads across all bots
+- **Quick Actions**: Direct access to bot management and configuration tasks
 
 ### Document Management
 
-![Documents Screenshot](docs/images/documents.png)
-
-#### Features:
-- **File Upload**: Drag-and-drop or click to upload
+#### Bot-Specific Document Management:
+- **Bot Selection**: Choose target bot from dropdown for document upload
+- **Isolated Collections**: Each bot maintains separate document libraries
+- **File Upload**: Drag-and-drop or click to upload with async processing
 - **Supported Formats**: PDF, DOC, DOCX, TXT, MD
-- **Duplicate Detection**: Prevents uploading identical files
-- **Processing Status**: Real-time embedding generation progress
-- **Document Preview**: View content and metadata
-- **Bulk Operations**: Delete multiple documents
+- **Bot-Specific Duplicates**: Prevents uploading identical files per bot (same document can exist for different bots)
+- **Processing Status**: Real-time embedding generation progress with cancellation
+- **Document Preview**: View content and metadata with bot association
+- **Bulk Operations**: Delete multiple documents with embedding cleanup
 
 #### Upload Process:
-1. Select files (multiple selection supported)
-2. Files are validated and checked for duplicates
-3. Content is extracted and chunked
-4. Embeddings are generated asynchronously
-5. Documents become searchable in conversations
+1. **Bot Selection**: Choose target bot for document association
+2. **File Validation**: Files validated and checked for bot-specific duplicates  
+3. **Content Extraction**: Text content extracted and preprocessed
+4. **Bot-Specific Chunking**: Documents split using bot's configured chunk size/overlap
+5. **Embedding Generation**: Vectorization using bot's specified embedding model
+6. **Storage**: Embeddings stored with bot association for isolated search
+7. **Availability**: Documents become searchable only by the assigned bot
 
 ### Model Configuration
 
