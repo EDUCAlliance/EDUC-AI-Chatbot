@@ -137,7 +137,18 @@ function performMultiBotMigration($db, $logger) {
             $db->prepare("UPDATE bot_room_config SET bot_id = ? WHERE bot_id IS NULL")->execute([$defaultBotId]);
             $db->prepare("UPDATE bot_conversations SET bot_id = ? WHERE bot_id IS NULL")->execute([$defaultBotId]);
             
-            // Step 5: Add foreign key constraints
+            // Step 5: Fix unique constraint on bot_docs to be per-bot
+            try {
+                // Drop the old unique constraint on checksum
+                $db->exec("ALTER TABLE bot_docs DROP CONSTRAINT IF EXISTS bot_docs_checksum_key");
+                // Add new unique constraint on (checksum, bot_id)
+                $db->exec("ALTER TABLE bot_docs ADD CONSTRAINT bot_docs_checksum_bot_id_unique UNIQUE (checksum, bot_id)");
+                $logger->info('Updated bot_docs unique constraint to be per-bot');
+            } catch (\PDOException $e) {
+                $logger->warning('Could not update bot_docs unique constraint: ' . $e->getMessage());
+            }
+            
+            // Step 6: Add foreign key constraints
             try {
                 $db->exec("ALTER TABLE bot_docs ADD CONSTRAINT fk_bot_docs_bot_id FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE");
             } catch (\PDOException $e) {
@@ -166,6 +177,25 @@ function performMultiBotMigration($db, $logger) {
 
 // Perform the migration
 performMultiBotMigration($db, $logger);
+
+// Fix unique constraint on bot_docs if it still exists in the old format
+try {
+    // Check if the old constraint exists
+    $constraintExists = $db->query("
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE table_name = 'bot_docs' 
+        AND constraint_name = 'bot_docs_checksum_key'
+    ")->fetchColumn();
+    
+    if ($constraintExists) {
+        $logger->info('Fixing bot_docs unique constraint to be per-bot');
+        $db->exec("ALTER TABLE bot_docs DROP CONSTRAINT bot_docs_checksum_key");
+        $db->exec("ALTER TABLE bot_docs ADD CONSTRAINT bot_docs_checksum_bot_id_unique UNIQUE (checksum, bot_id)");
+        $logger->info('Successfully updated bot_docs unique constraint');
+    }
+} catch (\PDOException $e) {
+    $logger->warning('Could not fix bot_docs unique constraint: ' . $e->getMessage());
+}
 
 // Add new columns if they don't exist (for schema migration)
 try {
