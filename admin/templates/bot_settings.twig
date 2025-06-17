@@ -184,7 +184,7 @@
                                 <label class="label">Group Chat Questions</label>
                                 <div class="control">
                                     <textarea class="textarea is-medium" name="onboarding_group_questions" rows="8" 
-                                              placeholder="What topics are you interested in?&#10;How can I help your team?">{% if bot.onboarding_group_questions %}{{ bot.onboarding_group_questions|json_decode|join("\n") }}{% endif %}</textarea>
+                                              placeholder="What topics are you interested in?&#10;How can I help your team?">{{ bot.onboarding_group_questions_array|join("\n") }}</textarea>
                                 </div>
                                 <p class="help">Questions for new group chat onboarding (one per line).</p>
                             </div>
@@ -194,7 +194,7 @@
                                 <label class="label">Direct Message Questions</label>
                                 <div class="control">
                                     <textarea class="textarea is-medium" name="onboarding_dm_questions" rows="8" 
-                                              placeholder="What would you like to learn?&#10;How can I assist you?">{% if bot.onboarding_dm_questions %}{{ bot.onboarding_dm_questions|json_decode|join("\n") }}{% endif %}</textarea>
+                                              placeholder="What would you like to learn?&#10;How can I assist you?">{{ bot.onboarding_dm_questions_array|join("\n") }}</textarea>
                                 </div>
                                 <p class="help">Questions for new direct message onboarding (one per line).</p>
                             </div>

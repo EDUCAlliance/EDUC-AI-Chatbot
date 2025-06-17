@@ -359,6 +359,10 @@ $app->get('/bots/{id}/settings', function (Request $request, Response $response,
         return $response->withStatus(404);
     }
     
+    // Decode JSON fields for easier template handling
+    $botData['onboarding_group_questions_array'] = json_decode($botData['onboarding_group_questions'] ?? '[]', true) ?: [];
+    $botData['onboarding_dm_questions_array'] = json_decode($botData['onboarding_dm_questions'] ?? '[]', true) ?: [];
+    
     $apiModels = $apiClient->getModels();
     $models = $apiModels['data'] ?? [];
     $embeddingModels = array_filter($models, fn($m) => strpos($m['id'], 'e5') !== false || strpos($m['id'], 'embed') !== false);
