@@ -161,13 +161,13 @@ if (!$roomConfig) {
 } else {
     $roomConfig['meta'] = json_decode($roomConfig['meta'], true);
 }
-
+/*
 if ($roomConfig['onboarding_done'] == false) {
     $logger->info('Onboarding not completed for room', ['roomToken' => $roomToken]);
     $replyText = "Onboarding is not completed for this room. Please complete onboarding in the Nextcloud client.";
     sendApiReply($replyText, $callbackUrl, $messageId, $logger);
     exit;
-}
+}*/
 
 // --- 4. Process Regular Message ---
 $logger->info('Processing regular message', ['roomToken' => $roomToken, 'userId' => $userId, 'message' => $message]);
