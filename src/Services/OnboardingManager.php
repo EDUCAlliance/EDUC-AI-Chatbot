@@ -76,36 +76,52 @@ class OnboardingManager
      *
      * @param array $roomConfig The current room configuration.
      * @param string $answer The user's answer.
+     * @return bool True if the answer was valid and stage was advanced, false otherwise.
      */
-    public function processAnswer(array &$roomConfig, string $answer): void
+    public function processAnswer(array &$roomConfig, string $answer): bool
     {
         $stage = $roomConfig['meta']['stage'] ?? 0;
         $roomConfig['meta']['answers'] = $roomConfig['meta']['answers'] ?? [];
         $answer = strtolower(trim($answer));
+        $validAnswer = false;
 
         switch ($stage) {
             case 0: // Is this a group or dm?
                 if (in_array($answer, ['group', 'g'])) {
                     $roomConfig['is_group'] = true;
+                    $validAnswer = true;
                 } elseif (in_array($answer, ['dm', 'd', 'direct message'])) {
                     $roomConfig['is_group'] = false;
+                    $validAnswer = true;
                 }
                 break;
             case 1: // Mention mode
                 if (in_array($answer, ['always', 'a'])) {
                     $roomConfig['mention_mode'] = 'always';
+                    $validAnswer = true;
                 } elseif (in_array($answer, ['on_mention', 'mention', 'm'])) {
                     $roomConfig['mention_mode'] = 'on_mention';
+                    $validAnswer = true;
                 }
                 break;
-            default: // Custom questions
-                $roomConfig['meta']['answers'][] = $answer;
+            default: // Custom questions - accept any non-empty answer
+                if (!empty(trim($answer))) {
+                    $roomConfig['meta']['answers'][] = $answer;
+                    $validAnswer = true;
+                }
                 break;
         }
 
-        // Advance to the next stage
-        $roomConfig['meta']['stage'] = ($stage + 1);
-        $this->updateRoomConfig($roomConfig);
+        // Only advance to the next stage if we got a valid answer
+        if ($validAnswer) {
+            $roomConfig['meta']['stage'] = ($stage + 1);
+            $this->updateRoomConfig($roomConfig);
+            return true;
+        } else {
+            // Update config without advancing stage (to persist any partial changes)
+            $this->updateRoomConfig($roomConfig);
+            return false;
+        }
     }
 
     private function updateRoomConfig(array $roomConfig): void

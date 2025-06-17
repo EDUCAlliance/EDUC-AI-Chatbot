@@ -120,6 +120,25 @@ if ($roomConfigInfo && $roomConfigInfo['bot_id']) {
             'mention_name' => $detectedBot['mention_name']
         ]);
         
+        // Check if user is trying to mention a different bot
+        $allBotsStmt = $db->query("SELECT mention_name FROM bots WHERE id != {$currentBotId}");
+        $otherBots = $allBotsStmt->fetchAll();
+        
+        foreach ($otherBots as $otherBot) {
+            $otherMentionName = ltrim($otherBot['mention_name'], '@');
+            if (stripos($message, '@' . $otherMentionName) !== false) {
+                $logger->info('User trying to mention different bot', [
+                    'room_token' => $roomToken,
+                    'assigned_bot' => $detectedBot['mention_name'],
+                    'mentioned_bot' => $otherBot['mention_name']
+                ]);
+                
+                $switchBotMessage = "In this chat-room the EDUC AI is assigned to the {$detectedBot['mention_name']} bot. To use a different bot, please restart this chat room with the reset command: ((RESET))";
+                sendReply($switchBotMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
+                exit;
+            }
+        }
+        
         // Check if the assigned bot is mentioned
         $mentionName = ltrim($detectedBot['mention_name'], '@');
         $shouldCheckMention = $roomConfigInfo['onboarding_done'] && 
@@ -413,7 +432,34 @@ if ($roomConfig['onboarding_done'] == false) {
     // --- END FIRST QUESTION HANDLING ---
 
     // For all subsequent steps we first *process* the previous answer
-    $onboardingManager->processAnswer($roomConfig, $message);
+    $answerValid = $onboardingManager->processAnswer($roomConfig, $message);
+    
+    // If the answer was invalid, ask the question again with helpful guidance
+    if (!$answerValid) {
+        $currentStage = $roomConfig['meta']['stage'] ?? 0;
+        $helpMessage = '';
+        
+        switch ($currentStage) {
+            case 0:
+                $helpMessage = "I didn't understand your answer. Please reply with 'group' if this is a group chat, or 'dm' if this is a direct message.";
+                break;
+            case 1:
+                $helpMessage = "I didn't understand your answer. Please reply with 'always' if I should respond to every message, or 'on_mention' if I should only respond when mentioned.";
+                break;
+            default:
+                $helpMessage = "Please provide an answer to continue with the onboarding process.";
+                break;
+        }
+        
+        $logger->info('Invalid onboarding answer, sending help message', [
+            'stage' => $currentStage,
+            'userAnswer' => $message,
+            'helpMessage' => $helpMessage
+        ]);
+        
+        sendReply($helpMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
+        exit;
+    }
 
     // AFTER processing answer, check if we've just identified a DM and should search for previous onboarding data
     if (($roomConfig['is_group'] ?? true) === false && $roomConfig['meta']['stage'] === 1 && !isset($roomConfig['meta']['reuse_state'])) {
