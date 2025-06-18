@@ -145,12 +145,28 @@ class ApiClient
         $responseData = json_decode($response, true);
 
         if ($httpCode >= 400 || isset($responseData['error'])) {
+            // Extract a more detailed error message if available (OpenAI compatible)
+            $detailedMessage = 'No specific error message provided by API.';
+            if (isset($responseData['error'])) {
+                if (is_array($responseData['error']) && isset($responseData['error']['message'])) {
+                    $detailedMessage = $responseData['error']['message'];
+                } elseif (is_string($responseData['error'])) {
+                    $detailedMessage = $responseData['error'];
+                } else {
+                    $detailedMessage = json_encode($responseData['error']);
+                }
+            }
+
             $this->logger->error('API Client HTTP Error', [
                 'code' => $httpCode,
-                'response' => $responseData['error'] ?? 'No error message.',
+                'response' => $responseData ?? $response, // Log the full response
                 'url' => $url
             ]);
-            return ['error' => $responseData['error'] ?? "HTTP Error {$httpCode}"];
+            // Return a structured error
+            return ['error' => [
+                'message' => "HTTP Error {$httpCode}: " . $detailedMessage,
+                'details' => $responseData
+            ]];
         }
 
         return $responseData;

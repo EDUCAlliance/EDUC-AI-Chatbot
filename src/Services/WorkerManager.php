@@ -90,7 +90,7 @@ class WorkerManager
                 $llmResponse = $this->apiClient->getChatCompletions($jobData['model'], $jobData['messages']);
                 
                 if (isset($llmResponse['error'])) {
-                     throw new \Exception('LLM API returned an error: ' . ($llmResponse['error']['message'] ?? json_encode($llmResponse['error'])));
+                     throw new \Exception($llmResponse['error']['message'] ?? json_encode($llmResponse['error']));
                 }
 
                 $replyContent = $llmResponse['choices'][0]['message']['content'] ?? 'Sorry, I encountered an error and cannot reply right now.';
