@@ -550,28 +550,10 @@ if ($roomConfigForPrompt) {
     }
 }
 
-// Prepare history for embedding (last 2 messages)
-$historyForEmbedding = array_slice($history, -2);
-$historyTextForEmbedding = '';
-if (!empty($historyForEmbedding)) {
-    $historyLines = [];
-    foreach ($historyForEmbedding as $msg) {
-        // Exclude the current message if it's already in history (it shouldn't be, but as a safeguard)
-        if ($msg['role'] === 'user' && $msg['content'] === $message) {
-            continue;
-        }
-        $historyLines[] = $msg['role'] . ': ' . $msg['content'];
-    }
-    $historyTextForEmbedding = implode("\n", $historyLines);
-}
-
 // Combine all parts for the final embedding text
 $embeddingTextParts = [];
 if (!empty($onboardingQnAForEmbedding)) {
     $embeddingTextParts[] = "Onboarding context:\n" . $onboardingQnAForEmbedding;
-}
-if (!empty($historyTextForEmbedding)) {
-    $embeddingTextParts[] = "Recent conversation history:\n" . $historyTextForEmbedding;
 }
 // Always add the current user message last, as it's the most important part
 $embeddingTextParts[] = "Current user message:\nuser: " . $message;
