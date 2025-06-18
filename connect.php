@@ -577,7 +577,19 @@ try {
         $logger->info('Similar chunks found', ['count' => count($similarChunks), 'bot_id' => $currentBotId]);
         
         if (!empty($similarChunks)) {
-            $ragContext = "Here is some context that might be relevant:\n\n---\n" . implode("\n\n", $similarChunks) . "\n---\n\n";
+            $fullRagContext = implode("\n\n", $similarChunks);
+            $maxRagLength = 8000; // Max character limit for RAG context to avoid overly large payloads
+
+            if (strlen($fullRagContext) > $maxRagLength) {
+                $truncatedContext = mb_substr($fullRagContext, 0, $maxRagLength);
+                $ragContext = "Here is some context that might be relevant:\n\n---\n" . $truncatedContext . "\n... (context truncated)\n---\n\n";
+                $logger->warning('RAG context was truncated due to size.', [
+                    'originalLength' => strlen($fullRagContext),
+                    'truncatedLength' => strlen($truncatedContext)
+                ]);
+            } else {
+                $ragContext = "Here is some context that might be relevant:\n\n---\n" . $fullRagContext . "\n---\n\n";
+            }
         }
     } else {
         $logger->warning('No embedding data received', ['response' => $embeddingResponse]);
