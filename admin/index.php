@@ -535,7 +535,7 @@ $app->post('/documents/upload', function (Request $request, Response $response) 
     }
     
     if ($uploadedFile->getError() === UPLOAD_ERR_OK) {
-        $uploadDir = APP_ROOT . '/uploads';
+        $uploadDir = WRITABLE_DIR . '/uploads';
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0775, true);
         }
@@ -586,7 +586,7 @@ $app->post('/documents/upload-async', function (Request $request, Response $resp
             throw new \Exception('File upload error: ' . $uploadedFile->getError());
         }
         
-        $uploadDir = APP_ROOT . '/uploads';
+        $uploadDir = WRITABLE_DIR . '/uploads';
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0775, true);
         }

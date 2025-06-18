@@ -73,8 +73,12 @@ class ApiClient
      */
     private function makeRequest(string $method, string $path, ?array $body = null): array
     {
-        $lockFilePath = APP_ROOT . '/cache/api_call.lock';
-        $timestampFilePath = APP_ROOT . '/cache/api_call.timestamp';
+        $cacheDir = WRITABLE_DIR . '/cache';
+        if (!is_dir($cacheDir)) {
+            mkdir($cacheDir, 0755, true);
+        }
+        $lockFilePath = $cacheDir . '/api_call.lock';
+        $timestampFilePath = $cacheDir . '/api_call.timestamp';
         
         $lockFileHandle = fopen($lockFilePath, 'c');
 

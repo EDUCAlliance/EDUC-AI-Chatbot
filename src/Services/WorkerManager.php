@@ -25,11 +25,17 @@ class WorkerManager
         $this->apiClient = $apiClient;
         $this->db = $db;
 
-        $baseDir = APP_ROOT . '/cache/queue/';
+        $baseDir = WRITABLE_DIR . '/cache/queue/';
         $this->pendingDir = $baseDir . 'pending/';
         $this->processingDir = $baseDir . 'processing/';
         $this->completedDir = $baseDir . 'completed/';
         $this->failedDir = $baseDir . 'failed/';
+
+        // Ensure all queue directories exist
+        if (!is_dir($this->pendingDir)) { mkdir($this->pendingDir, 0755, true); }
+        if (!is_dir($this->processingDir)) { mkdir($this->processingDir, 0755, true); }
+        if (!is_dir($this->completedDir)) { mkdir($this->completedDir, 0755, true); }
+        if (!is_dir($this->failedDir)) { mkdir($this->failedDir, 0755, true); }
     }
 
     public function processQueue(): array

@@ -581,8 +581,13 @@ $jobData = [
     'botId' => $currentBotId
 ];
 
+$queueDir = WRITABLE_DIR . '/cache/queue/pending';
+if (!is_dir($queueDir)) {
+    mkdir($queueDir, 0755, true);
+}
+
 $jobId = uniqid('job_', true);
-$jobFilePath = APP_ROOT . '/cache/queue/pending/' . $jobId . '.json';
+$jobFilePath = $queueDir . '/' . $jobId . '.json';
 
 if (file_put_contents($jobFilePath, json_encode($jobData, JSON_PRETTY_PRINT))) {
     $logger->info('Successfully queued LLM job', ['jobId' => $jobId, 'filePath' => $jobFilePath]);

@@ -10,7 +10,7 @@ class Logger
 
     public function __construct()
     {
-        $this->logDirectory = APP_ROOT . '/logs/';
+        $this->logDirectory = WRITABLE_DIR . '/logs/';
         if (!is_dir($this->logDirectory)) {
             mkdir($this->logDirectory, 0755, true);
         }

@@ -11,6 +11,20 @@ use Dotenv\Dotenv;
 // Define the application root directory
 define('APP_ROOT', dirname(__DIR__));
 
+// --- Writable Directory ---
+// Define a writable directory, preferring /app/data for Cloudron environments,
+// falling back to a local 'writable' directory for development.
+if (is_dir('/app/data') && is_writable('/app/data')) {
+    define('WRITABLE_DIR', '/app/data');
+} else {
+    define('WRITABLE_DIR', APP_ROOT . '/writable');
+}
+
+// Ensure the base writable directory exists
+if (!is_dir(WRITABLE_DIR)) {
+    mkdir(WRITABLE_DIR, 0755, true);
+}
+
 // --- Autoloading ---
 // Load dependencies managed by Composer
 require_once APP_ROOT . '/vendor/autoload.php';
