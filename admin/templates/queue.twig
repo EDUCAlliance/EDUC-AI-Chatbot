@@ -69,6 +69,53 @@
         </form>
     </div>
 
+    {% if failedJobs is not empty %}
+    <div class="box">
+        <h2 class="subtitle has-text-weight-semibold">Failed Jobs (Last 50)</h2>
+        <div class="table-container">
+            <table class="table is-striped is-fullwidth is-hoverable">
+                <thead>
+                    <tr>
+                        <th>Job ID</th>
+                        <th>Failed At</th>
+                        <th style="width: 50%;">Error Message</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for job in failedJobs %}
+                    <tr>
+                        <td>{{ job.id }}</td>
+                        <td>{{ job.updated_at|date('Y-m-d H:i:s') }}</td>
+                        <td><pre style="white-space: pre-wrap; background-color: transparent; padding: 0; font-size: 0.8em;">{{ job.error_message }}</pre></td>
+                        <td>
+                            <form action="{{ url_for('queue-retry') }}" method="post" style="display:inline-block;">
+                                <input type="hidden" name="job_id" value="{{ job.id }}">
+                                <button class="button is-small is-info" title="Retry Job">
+                                    <span class="icon is-small">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polyline points="23 4 23 10 17 10"></polyline>
+                                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                        </svg>
+                                    </span>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if stats.failed > 0 %}
+        <div class="mt-4">
+            <form action="{{ url_for('queue-retry-all') }}" method="post" style="display:inline-block; margin-right: 1rem;">
+                 <button class="button is-info" onclick="return confirm('Are you sure you want to re-queue all {{ stats.failed }} failed jobs?');">Retry All Failed Jobs</button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <div class="box">
         <h2 class="subtitle has-text-weight-semibold">Automated Processing (Cron Job)</h2>
         <div class="content">

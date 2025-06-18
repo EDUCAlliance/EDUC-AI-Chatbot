@@ -147,6 +147,46 @@ class WorkerManager
         return $stats;
     }
 
+    public function getFailedJobs(int $limit = 50): array
+    {
+        try {
+            $stmt = $this->db->prepare("SELECT id, job_data, error_message, updated_at FROM bot_job_queue WHERE status = 'failed' ORDER BY updated_at DESC LIMIT ?");
+            $stmt->execute([$limit]);
+            return $stmt->fetchAll();
+        } catch (Throwable $e) {
+            $this->logger->error('Failed to get failed jobs from DB', ['error' => $e->getMessage()]);
+            return [];
+        }
+    }
+
+    public function retryJob(int $jobId): bool
+    {
+        try {
+            $stmt = $this->db->prepare("UPDATE bot_job_queue SET status = 'pending', updated_at = NOW(), attempts = 0, error_message = NULL WHERE id = ? AND status = 'failed'");
+            $stmt->execute([$jobId]);
+            return $stmt->rowCount() > 0;
+        } catch (Throwable $e) {
+            $this->logger->error('Failed to retry job', ['job_id' => $jobId, 'error' => $e->getMessage()]);
+            return false;
+        }
+    }
+
+    public function retryAllFailedJobs(): int
+    {
+        try {
+            $stmt = $this->db->prepare("UPDATE bot_job_queue SET status = 'pending', updated_at = NOW(), attempts = 0, error_message = NULL WHERE status = 'failed'");
+            $stmt->execute();
+            $count = $stmt->rowCount();
+            if ($count > 0) {
+                $this->logger->info('Retrying all failed jobs', ['count' => $count]);
+            }
+            return $count;
+        } catch (Throwable $e) {
+            $this->logger->error('Failed to retry all failed jobs', ['error' => $e->getMessage()]);
+            return 0;
+        }
+    }
+
     public function clearQueue(string $queue): bool
     {
         if (!in_array($queue, ['completed', 'failed'])) {

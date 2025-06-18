@@ -1006,6 +1006,7 @@ $app->get('/rag-settings', function (Request $request, Response $response) use (
 // Queue Management Routes
 $app->get('/queue', function (Request $request, Response $response) use ($twig, $workerManager) {
     $stats = $workerManager->getQueueStats();
+    $failedJobs = $workerManager->getFailedJobs();
     
     // Retrieve flash messages
     $flash = $_SESSION['flash'] ?? [];
@@ -1013,6 +1014,7 @@ $app->get('/queue', function (Request $request, Response $response) use ($twig, 
     
     return $twig->render($response, 'queue.twig', [
         'stats' => $stats,
+        'failedJobs' => $failedJobs,
         'currentPage' => 'queue',
         'flash' => $flash
     ]);
@@ -1035,9 +1037,27 @@ $app->post('/queue/clear', function (Request $request, Response $response) use (
     return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('queue'))->withStatus(302);
 })->setName('queue-clear')->add($authMiddleware);
 
+$app->post('/queue/retry', function (Request $request, Response $response) use ($workerManager, $app) {
+    $jobId = $request->getParsedBody()['job_id'] ?? null;
+    if ($jobId) {
+        if ($workerManager->retryJob((int)$jobId)) {
+            $_SESSION['flash']['success'] = "Retrying job #{$jobId}.";
+        } else {
+            $_SESSION['flash']['error'] = "Could not retry job #{$jobId}.";
+        }
+    }
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('queue'))->withStatus(302);
+})->setName('queue-retry')->add($authMiddleware);
+
+$app->post('/queue/retry-all', function (Request $request, Response $response) use ($workerManager, $app) {
+    $count = $workerManager->retryAllFailedJobs();
+    $_SESSION['flash']['success'] = "Retrying {$count} failed jobs.";
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('queue'))->withStatus(302);
+})->setName('queue-retry-all')->add($authMiddleware);
+
 // Helper function to read log entries
 function getLogEntries(int $limit = 100): array {
-    $logDir = APP_ROOT . '/logs';
+    $logDir = WRITABLE_DIR . '/logs';
     $logFile = $logDir . '/' . date('Y-m-d') . '.log';
     
     if (!file_exists($logFile)) {
