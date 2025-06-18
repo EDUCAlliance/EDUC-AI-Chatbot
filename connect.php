@@ -577,19 +577,10 @@ try {
         $logger->info('Similar chunks found', ['count' => count($similarChunks), 'bot_id' => $currentBotId]);
         
         if (!empty($similarChunks)) {
-            $fullRagContext = implode("\n\n", $similarChunks);
-            $maxRagLength = 4000; // Max character limit for RAG context to avoid overly large payloads
 
-            if (strlen($fullRagContext) > $maxRagLength) {
-                $truncatedContext = mb_substr($fullRagContext, 0, $maxRagLength);
-                $ragContext = "Here is some context that might be relevant:\n\n---\n" . $truncatedContext . "\n... (context truncated)\n---\n\n";
-                $logger->warning('RAG context was truncated due to size.', [
-                    'originalLength' => strlen($fullRagContext),
-                    'truncatedLength' => strlen($ragContext)
-                ]);
-            } else {
-                $ragContext = "Here is some context that might be relevant:\n\n---\n" . $fullRagContext . "\n---\n\n";
-            }
+            $ragContext = "Here is some context that might be relevant:\n\n---\n" . implode("\n\n", $similarChunks) . "\n---\n\n";
+
+        
         }
     } else {
         $logger->warning('No embedding data received', ['response' => $embeddingResponse]);
@@ -637,7 +628,7 @@ foreach ($history as $msg) {
     $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
 }
 
-$logger->info('Sending request to LLM', ['model' => $model, 'messageCount' => count($messages)]);
+$logger->info('Sending request to LLM', ['model' => $model, 'The complete LLM message' => $messages]);
 
 try {
     $llmResponse = $apiClient->getChatCompletions($model, $messages);

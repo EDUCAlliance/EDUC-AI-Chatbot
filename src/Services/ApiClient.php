@@ -64,7 +64,7 @@ class ApiClient
     }
 
     /**
-     * Makes a generic request to the AI API.
+     * Makes a generic request to the AI API, with rate limiting.
      *
      * @param string $method The HTTP method (GET, POST).
      * @param string $path The API endpoint path (e.g., /chat/completions).
@@ -72,6 +72,59 @@ class ApiClient
      * @return array The decoded JSON response.
      */
     private function makeRequest(string $method, string $path, ?array $body = null): array
+    {
+        $lockFilePath = APP_ROOT . '/cache/api_call.lock';
+        $timestampFilePath = APP_ROOT . '/cache/api_call.timestamp';
+        
+        $lockFileHandle = fopen($lockFilePath, 'c');
+
+        if ($lockFileHandle && flock($lockFileHandle, LOCK_EX)) {
+            $this->logger->info('Acquired API call lock.');
+            
+            try {
+                $lastCallTimestamp = (int) @file_get_contents($timestampFilePath);
+                $currentTime = time();
+                $elapsed = $currentTime - $lastCallTimestamp;
+                $minInterval = 5; // 5 seconds
+
+                if ($elapsed < $minInterval) {
+                    $sleepTime = $minInterval - $elapsed;
+                    if ($sleepTime > 0) {
+                        $this->logger->info('Rate limit protection: sleeping for ' . $sleepTime . ' seconds.');
+                        sleep($sleepTime);
+                    }
+                }
+
+                $responseData = $this->executeCurlRequest($method, $path, $body);
+
+                file_put_contents($timestampFilePath, (string)time());
+                $this->logger->info('Updated API last call timestamp.');
+                
+                return $responseData;
+
+            } finally {
+                flock($lockFileHandle, LOCK_UN);
+                fclose($lockFileHandle);
+                $this->logger->info('Released API call lock.');
+            }
+        } else {
+            $this->logger->error('Could not acquire API lock. Proceeding without rate limit protection.');
+            if ($lockFileHandle) {
+                fclose($lockFileHandle);
+            }
+            return $this->executeCurlRequest($method, $path, $body);
+        }
+    }
+
+    /**
+     * Executes the actual cURL request to the API.
+     *
+     * @param string $method The HTTP method.
+     * @param string $path The API endpoint path.
+     * @param array|null $body The request body.
+     * @return array The decoded JSON response.
+     */
+    private function executeCurlRequest(string $method, string $path, ?array $body = null): array
     {
         $url = $this->apiEndpoint . $path;
         $headers = [
