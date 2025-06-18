@@ -679,6 +679,12 @@ html {
     color: var(--text-primary);
 }
 
+/* CHROME FIX: Force dropdown option visibility */
+.select select option {
+    color: black !important;
+    background: white !important;
+}
+
 /* Enhanced Buttons */
 .button {
     font-weight: 600;
