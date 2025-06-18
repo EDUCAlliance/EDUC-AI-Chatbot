@@ -567,42 +567,51 @@ if ($roomConfigForPrompt) {
 // Compose messages for API
 $messages = [['role' => 'system', 'content' => $onboardingContext . $ragContext . $systemPrompt]];
 
-// Add the current user message to the history before sanitizing
-$historyWithCurrentUser = $history;
-$historyWithCurrentUser[] = ['role' => 'user', 'content' => $message];
-
 // Sanitize history to merge consecutive messages from the same role
 $mergedHistory = [];
-if (!empty($historyWithCurrentUser)) {
-    // Start with the first message
-    $mergedHistory[] = $historyWithCurrentUser[0];
+if (!empty($history)) {
+    // Start with the first entry that is a user message (skip leading assistant messages)
+    $idx = 0;
+    while ($idx < count($history) && $history[$idx]['role'] !== 'user') {
+        $idx++;
+    }
+    if ($idx < count($history)) {
+        $mergedHistory[] = $history[$idx];
+        $idx++;
+    }
 
-    for ($i = 1; $i < count($historyWithCurrentUser); $i++) {
-        $currentMsg = $historyWithCurrentUser[$i];
+    // Continue through remaining messages
+    for (; $idx < count($history); $idx++) {
+        $currentMsg = $history[$idx];
         $lastMergedMsg = &$mergedHistory[count($mergedHistory) - 1];
 
-        if (isset($currentMsg['role'], $lastMergedMsg['role']) && $currentMsg['role'] === $lastMergedMsg['role']) {
-            // Same role, append content
+        if ($currentMsg['role'] === $lastMergedMsg['role']) {
+            // Same role, append content (merge)
             $lastMergedMsg['content'] .= "\n\n" . $currentMsg['content'];
         } else {
-            // Different role, add new entry
+            // Different role, add
             $mergedHistory[] = $currentMsg;
         }
     }
 }
 
+// Ensure strict alternation by skipping any accidental repeats (extra guard)
+$sanitizedHistory = [];
+$lastRole = null;
 foreach ($mergedHistory as $msg) {
-    // Ensure that only valid messages with role and content are added
-    if (isset($msg['role'], $msg['content'])) {
-        $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
+    if ($msg['role'] === $lastRole) {
+        // skip duplicate role (should not occur after merge, but guard anyway)
+        continue;
     }
+    $sanitizedHistory[] = $msg;
+    $lastRole = $msg['role'];
 }
 
-$logger->info('Preparing to queue LLM request', [
-    'model' => $model, 
-    'messageCount' => count($messages),
-    'final_payload_for_api' => json_encode($messages, JSON_PRETTY_PRINT) // Definitive log
-]);
+foreach ($sanitizedHistory as $msg) {
+    $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
+}
+
+$logger->info('Preparing to queue LLM request', ['model' => $model, 'messageCount' => count($messages)]);
 
 // --- 7. Queue LLM Job ---
 $jobData = [
