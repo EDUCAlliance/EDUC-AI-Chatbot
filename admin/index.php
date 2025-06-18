@@ -230,6 +230,17 @@ try {
         completed_at TIMESTAMP,
         UNIQUE(doc_id)
     )");
+    
+    // Create job queue table
+    $db->exec("CREATE TABLE IF NOT EXISTS bot_job_queue (
+        id SERIAL PRIMARY KEY,
+        job_data JSONB NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending', -- pending, processing, completed, failed
+        attempts INTEGER DEFAULT 0,
+        error_message TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )");
 } catch (\PDOException $e) {
     // Schema migration might fail on some PostgreSQL versions, but that's okay if columns already exist
     error_log("Schema migration warning: " . $e->getMessage());

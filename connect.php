@@ -17,6 +17,7 @@ use NextcloudBot\Services\OnboardingManager;
 use NextcloudBot\Services\VectorStore;
 use NextcloudBot\Helpers\Logger;
 use NextcloudBot\Helpers\TalkHelper;
+use NextcloudBot\Services\WorkerManager;
 
 // --- Initialization ---
 $logger = new Logger();
@@ -29,6 +30,7 @@ $apiClient = new ApiClient(
 $vectorStore = new VectorStore($db);
 $embeddingService = new EmbeddingService($apiClient, $vectorStore, $logger, $db);
 $onboardingManager = new OnboardingManager($db, $logger);
+$workerManager = new WorkerManager($logger, $apiClient, $db);
 
 $secret = NextcloudBot\env('BOT_TOKEN');
 $ncUrl = NextcloudBot\env('NC_URL');
@@ -581,18 +583,10 @@ $jobData = [
     'botId' => $currentBotId
 ];
 
-$queueDir = WRITABLE_DIR . '/cache/queue/pending';
-if (!is_dir($queueDir)) {
-    mkdir($queueDir, 0755, true);
-}
-
-$jobId = uniqid('job_', true);
-$jobFilePath = $queueDir . '/' . $jobId . '.json';
-
-if (file_put_contents($jobFilePath, json_encode($jobData, JSON_PRETTY_PRINT))) {
-    $logger->info('Successfully queued LLM job', ['jobId' => $jobId, 'filePath' => $jobFilePath]);
+if ($workerManager->enqueueJob($jobData)) {
+    $logger->info('Successfully queued LLM job to database');
 } else {
-    $logger->error('Failed to write job file to queue', ['filePath' => $jobFilePath]);
+    $logger->error('Failed to write job to database queue');
     // Optionally, send a failure message back to the user
     $failMsg = "Sorry, I couldn't process your request right now due to a temporary issue with my internal queue. Please try again in a moment.";
     TalkHelper::sendReply($failMsg, $roomToken, $messageId, $ncUrl, $secret, $logger);

@@ -73,51 +73,33 @@ class ApiClient
      */
     private function makeRequest(string $method, string $path, ?array $body = null): array
     {
-        $cacheDir = WRITABLE_DIR . '/cache';
+        // Simple rate limiting without file lock, as DB handles atomicity.
+        $timestampFilePath = WRITABLE_DIR . '/cache/api_call.timestamp';
+        
+        // Ensure cache directory exists
+        $cacheDir = dirname($timestampFilePath);
         if (!is_dir($cacheDir)) {
             mkdir($cacheDir, 0755, true);
         }
-        $lockFilePath = $cacheDir . '/api_call.lock';
-        $timestampFilePath = $cacheDir . '/api_call.timestamp';
-        
-        $lockFileHandle = fopen($lockFilePath, 'c');
 
-        if ($lockFileHandle && flock($lockFileHandle, LOCK_EX)) {
-            $this->logger->info('Acquired API call lock.');
-            
-            try {
-                $lastCallTimestamp = (int) @file_get_contents($timestampFilePath);
-                $currentTime = time();
-                $elapsed = $currentTime - $lastCallTimestamp;
-                $minInterval = 5; // 5 seconds
+        $lastCallTimestamp = (int) @file_get_contents($timestampFilePath);
+        $currentTime = time();
+        $elapsed = $currentTime - $lastCallTimestamp;
+        $minInterval = 5; // 5 seconds
 
-                if ($elapsed < $minInterval) {
-                    $sleepTime = $minInterval - $elapsed;
-                    if ($sleepTime > 0) {
-                        $this->logger->info('Rate limit protection: sleeping for ' . $sleepTime . ' seconds.');
-                        sleep($sleepTime);
-                    }
-                }
-
-                $responseData = $this->executeCurlRequest($method, $path, $body);
-
-                file_put_contents($timestampFilePath, (string)time());
-                $this->logger->info('Updated API last call timestamp.');
-                
-                return $responseData;
-
-            } finally {
-                flock($lockFileHandle, LOCK_UN);
-                fclose($lockFileHandle);
-                $this->logger->info('Released API call lock.');
+        if ($elapsed < $minInterval) {
+            $sleepTime = $minInterval - $elapsed;
+            if ($sleepTime > 0) {
+                $this->logger->info('Rate limit protection: sleeping for ' . $sleepTime . ' seconds.');
+                sleep($sleepTime);
             }
-        } else {
-            $this->logger->error('Could not acquire API lock. Proceeding without rate limit protection.');
-            if ($lockFileHandle) {
-                fclose($lockFileHandle);
-            }
-            return $this->executeCurlRequest($method, $path, $body);
         }
+
+        $responseData = $this->executeCurlRequest($method, $path, $body);
+
+        file_put_contents($timestampFilePath, (string)time());
+        
+        return $responseData;
     }
 
     /**
