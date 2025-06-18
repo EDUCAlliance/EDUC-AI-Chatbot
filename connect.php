@@ -567,17 +567,21 @@ if ($roomConfigForPrompt) {
 // Compose messages for API
 $messages = [['role' => 'system', 'content' => $onboardingContext . $ragContext . $systemPrompt]];
 
+// Add the current user message to the history before sanitizing
+$historyWithCurrentUser = $history;
+$historyWithCurrentUser[] = ['role' => 'user', 'content' => $message];
+
 // Sanitize history to merge consecutive messages from the same role
 $mergedHistory = [];
-if (!empty($history)) {
+if (!empty($historyWithCurrentUser)) {
     // Start with the first message
-    $mergedHistory[] = $history[0];
+    $mergedHistory[] = $historyWithCurrentUser[0];
 
-    for ($i = 1; $i < count($history); $i++) {
-        $currentMsg = $history[$i];
+    for ($i = 1; $i < count($historyWithCurrentUser); $i++) {
+        $currentMsg = $historyWithCurrentUser[$i];
         $lastMergedMsg = &$mergedHistory[count($mergedHistory) - 1];
 
-        if ($currentMsg['role'] === $lastMergedMsg['role']) {
+        if (isset($currentMsg['role'], $lastMergedMsg['role']) && $currentMsg['role'] === $lastMergedMsg['role']) {
             // Same role, append content
             $lastMergedMsg['content'] .= "\n\n" . $currentMsg['content'];
         } else {
@@ -588,10 +592,17 @@ if (!empty($history)) {
 }
 
 foreach ($mergedHistory as $msg) {
-    $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
+    // Ensure that only valid messages with role and content are added
+    if (isset($msg['role'], $msg['content'])) {
+        $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
+    }
 }
 
-$logger->info('Preparing to queue LLM request', ['model' => $model, 'messageCount' => count($messages)]);
+$logger->info('Preparing to queue LLM request', [
+    'model' => $model, 
+    'messageCount' => count($messages),
+    'final_payload_for_api' => json_encode($messages, JSON_PRETTY_PRINT) // Definitive log
+]);
 
 // --- 7. Queue LLM Job ---
 $jobData = [
