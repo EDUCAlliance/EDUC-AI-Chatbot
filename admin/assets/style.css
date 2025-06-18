@@ -673,6 +673,12 @@ html {
     border-color: var(--primary-light);
 }
 
+/* Ensure dropdown text is visible */
+.select.is-fullwidth select,
+.select select option {
+    color: var(--text-primary);
+}
+
 /* Enhanced Buttons */
 .button {
     font-weight: 600;
