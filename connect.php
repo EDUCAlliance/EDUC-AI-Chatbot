@@ -566,7 +566,28 @@ if ($roomConfigForPrompt) {
 
 // Compose messages for API
 $messages = [['role' => 'system', 'content' => $onboardingContext . $ragContext . $systemPrompt]];
-foreach ($history as $msg) {
+
+// Sanitize history to merge consecutive messages from the same role
+$mergedHistory = [];
+if (!empty($history)) {
+    // Start with the first message
+    $mergedHistory[] = $history[0];
+
+    for ($i = 1; $i < count($history); $i++) {
+        $currentMsg = $history[$i];
+        $lastMergedMsg = &$mergedHistory[count($mergedHistory) - 1];
+
+        if ($currentMsg['role'] === $lastMergedMsg['role']) {
+            // Same role, append content
+            $lastMergedMsg['content'] .= "\n\n" . $currentMsg['content'];
+        } else {
+            // Different role, add new entry
+            $mergedHistory[] = $currentMsg;
+        }
+    }
+}
+
+foreach ($mergedHistory as $msg) {
     $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
 }
 
