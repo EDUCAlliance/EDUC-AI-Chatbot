@@ -564,8 +564,8 @@ if ($roomConfigForPrompt) {
 }
 // --- End Onboarding Context Injection ---
 
-// Compose messages for API
-$messages = [['role' => 'system', 'content' => $onboardingContext . $ragContext . $systemPrompt]];
+// Prepare system context (Mixtral doesn't support system role, so we'll prepend to first user message)
+$systemContext = $onboardingContext . $ragContext . $systemPrompt;
 
 // Sanitize history to merge consecutive messages from the same role
 $mergedHistory = [];
@@ -607,11 +607,46 @@ foreach ($mergedHistory as $msg) {
     $lastRole = $msg['role'];
 }
 
-foreach ($sanitizedHistory as $msg) {
-    $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
+// Compose messages for API (Mixtral-compatible: no system role)
+$messages = [];
+
+// Check if we're using a Mixtral model that doesn't support system messages
+$isMixtralModel = stripos($model, 'mixtral') !== false || stripos($model, 'mistral') !== false;
+
+if ($isMixtralModel) {
+    // For Mixtral: prepend system context to the first user message
+    $systemPrepended = false;
+    foreach ($sanitizedHistory as $msg) {
+        if ($msg['role'] === 'user' && !$systemPrepended) {
+            // Prepend system context to first user message
+            $messages[] = [
+                'role' => 'user',
+                'content' => $systemContext . "\n\n" . $msg['content']
+            ];
+            $systemPrepended = true;
+        } else {
+            $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
+        }
+    }
+    
+    // If no user message in history, create one with just the system context
+    if (!$systemPrepended) {
+        $messages[] = ['role' => 'user', 'content' => $systemContext];
+    }
+} else {
+    // For other models: use traditional system message
+    $messages[] = ['role' => 'system', 'content' => $systemContext];
+    foreach ($sanitizedHistory as $msg) {
+        $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
+    }
 }
 
-$logger->info('Preparing to queue LLM request', ['model' => $model, 'messageCount' => count($messages)]);
+$logger->info('Preparing to queue LLM request', [
+    'model' => $model, 
+    'messageCount' => count($messages),
+    'isMixtralModel' => $isMixtralModel ?? false,
+    'final_payload_for_api' => json_encode($messages, JSON_PRETTY_PRINT)
+]);
 
 // --- 7. Queue LLM Job ---
 $jobData = [
