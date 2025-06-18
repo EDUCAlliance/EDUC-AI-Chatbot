@@ -1,0 +1,91 @@
+{% extends "layout.twig" %}
+
+{% block title %}Queue Management{% endblock %}
+
+{% block heading %}Queue Management{% endblock %}
+
+{% block content %}
+    {% if flash.success %}
+        <div class="notification is-success">
+            {{ flash.success }}
+        </div>
+    {% endif %}
+    {% if flash.error %}
+        <div class="notification is-danger">
+            {{ flash.error }}
+        </div>
+    {% endif %}
+
+    <div class="dashboard-stats">
+        <div class="stat-card">
+            <p class="heading">Pending</p>
+            <p class="title">{{ stats.pending }}</p>
+        </div>
+        <div class="stat-card">
+            <p class="heading">In Progress</p>
+            <p class="title">{{ stats.processing }}</p>
+        </div>
+        <div class="stat-card has-text-success">
+            <p class="heading">Completed</p>
+            <p class="title">{{ stats.completed }}</p>
+        </div>
+        <div class="stat-card has-text-danger">
+            <p class="heading">Failed</p>
+            <p class="title">{{ stats.failed }}</p>
+        </div>
+    </div>
+
+    <div class="box">
+        <h2 class="subtitle has-text-weight-semibold">Manual Control</h2>
+        <p>Process all pending jobs in the queue. This runs one batch and is useful for testing or if the background worker is not running.</p>
+        <br>
+        <form action="{{ url_for('queue-process') }}" method="post" style="display: inline-block;">
+            <button type="submit" class="button is-primary">
+                <span class="icon is-small">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                </span>
+                <span>Process {{ stats.pending }} Pending Jobs</span>
+            </button>
+        </form>
+    </div>
+
+    <div class="box">
+        <h2 class="subtitle has-text-weight-semibold">Maintenance</h2>
+        <p>Clear out old jobs from the completed or failed queues to save space.</p>
+        <br>
+        <form action="{{ url_for('queue-clear') }}" method="post" style="display: inline-block; margin-right: 1rem;">
+            <input type="hidden" name="queue" value="completed">
+            <button type="submit" class="button is-light" onclick="return confirm('Are you sure you want to delete all {{ stats.completed }} completed job logs?');">
+                <span>Clear {{ stats.completed }} Completed Jobs</span>
+            </button>
+        </form>
+        <form action="{{ url_for('queue-clear') }}" method="post" style="display: inline-block;">
+            <input type="hidden" name="queue" value="failed">
+            <button type="submit" class="button is-danger is-light" onclick="return confirm('Are you sure you want to delete all {{ stats.failed }} failed job logs?');">
+                <span>Clear {{ stats.failed }} Failed Jobs</span>
+            </button>
+        </form>
+    </div>
+
+    <div class="box">
+        <h2 class="subtitle has-text-weight-semibold">Automated Processing (Cron Job)</h2>
+        <div class="content">
+            <p>For fully automated, hands-off queue processing, you should set up a cron job on your server to periodically call a dedicated script. This is the recommended method for production environments.</p>
+            <p>Your cron job should execute a GET request to the following URL. A common interval is every 1 or 5 minutes.</p>
+            <div class="notification is-light">
+                <strong>Cron URL:</strong>
+                <code style="display: block; padding: 0.5em; margin-top: 0.5em;">{{ base_url }}/apps/{{ app_directory }}/cron.php</code>
+            </div>
+            <p>Example cron command using <code>curl</code> or <code>wget</code>:</p>
+            <pre># Run every minute
+* * * * * curl -sS "{{ base_url }}/apps/{{ app_directory }}/cron.php" > /dev/null 2>&1</pre>
+            <p>Or:</p>
+            <pre># Run every 5 minutes
+*/5 * * * * wget -qO- "{{ base_url }}/apps/{{ app_directory }}/cron.php" > /dev/null 2>&1</pre>
+            <p>This ensures that your queue is processed reliably in the background without manual intervention.</p>
+        </div>
+    </div>
+
+{% endblock %} 

@@ -16,6 +16,7 @@ use NextcloudBot\Services\EmbeddingService;
 use NextcloudBot\Services\OnboardingManager;
 use NextcloudBot\Services\VectorStore;
 use NextcloudBot\Helpers\Logger;
+use NextcloudBot\Helpers\TalkHelper;
 
 // --- Initialization ---
 $logger = new Logger();
@@ -134,7 +135,7 @@ if ($roomConfigInfo && $roomConfigInfo['bot_id']) {
                 ]);
                 
                 $switchBotMessage = "In this chat-room the EDUC AI is assigned to the {$detectedBot['mention_name']} bot. To use a different bot, please restart this chat room with the reset command: ((RESET))";
-                sendReply($switchBotMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
+                TalkHelper::sendReply($switchBotMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
                 exit;
             }
         }
@@ -196,7 +197,7 @@ if (stripos($message, '((RESET))') !== false) {
         $logger->info('Room reset completed', ['roomToken' => $roomToken]);
 
         $resetMessage = "🔄 Bot has been reset for this room! I've cleared my memory and configuration. Send me a message to start fresh onboarding.";
-        $success = sendReply($resetMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
+        $success = TalkHelper::sendReply($resetMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
 
         if (!$success) {
             $logger->error('Failed to send reset confirmation');
@@ -205,7 +206,7 @@ if (stripos($message, '((RESET))') !== false) {
     } catch (\PDOException $e) {
         $logger->error('Failed to reset room', ['error' => $e->getMessage(), 'roomToken' => $roomToken]);
         $errorMessage = "❌ Sorry, I couldn't reset the room due to a database error. Please try again or contact an administrator.";
-        sendReply($errorMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
+        TalkHelper::sendReply($errorMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
     }
 
     exit;
@@ -220,69 +221,6 @@ try {
 } catch (\PDOException $e) {
     $logger->error('Failed to fetch room config', ['error' => $e->getMessage(), 'roomToken' => $roomToken]);
     $roomConfig = false; // Will trigger creation of new config
-}
-
-// Function to send a reply to Nextcloud Talk
-function sendReply(string $message, string $roomToken, int $replyToId, string $ncUrl, string $secret, Logger $logger) {
-    $apiUrl = 'https://' . $ncUrl . '/ocs/v2.php/apps/spreed/api/v1/bot/' . $roomToken . '/message';
-    $requestBody = [
-        'message' => $message,
-        'referenceId' => bin2hex(random_bytes(32)), // Use longer reference ID as per docs
-        'replyTo' => $replyToId,
-        'silent' => false // Explicit silent parameter
-    ];
-    $jsonBody = json_encode($requestBody);
-    $random = bin2hex(random_bytes(32));
-    $hash = hash_hmac('sha256', $random . $requestBody['message'], $secret);
-    
-    $logger->info('Sending reply to Nextcloud', [
-        'apiUrl' => $apiUrl,
-        'roomToken' => $roomToken,
-        'replyToId' => $replyToId,
-        'messagePreview' => substr($message, 0, 100) . (strlen($message) > 100 ? '...' : ''),
-        'fullMessage' => $message,
-        'messageLength' => strlen($message),
-        'requestBody' => $requestBody
-    ]);
-    
-    $ch = curl_init($apiUrl);
-    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonBody);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'OCS-APIRequest: true',
-        'X-Nextcloud-Talk-Bot-Random: ' . $random,
-        'X-Nextcloud-Talk-Bot-Signature: ' . $hash,
-    ]);
-    
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlError = curl_error($ch);
-    curl_close($ch);
-    
-    if ($curlError) {
-        $logger->error('cURL error when sending reply', ['error' => $curlError]);
-        return false;
-    }
-    
-    if ($httpCode >= 400) {
-        $logger->error('Failed to send reply to Nextcloud', [
-            'code' => $httpCode, 
-            'response' => $response,
-            'requestBody' => $requestBody,
-            'jsonBody' => $jsonBody
-        ]);
-        return false;
-    } else {
-        $logger->info('Successfully sent reply to Nextcloud.', [
-            'httpCode' => $httpCode,
-            'messageLength' => strlen($message),
-            'response' => $response
-        ]);
-        return true;
-    }
 }
 
 // If no config, start onboarding
@@ -382,7 +320,7 @@ if ($roomConfig['onboarding_done'] == false) {
                 ]);
 
                 $replyText = "✅ Previous onboarding answers applied. I'm ready to help you now!";
-                sendReply($replyText, $roomToken, $messageId, $ncUrl, $secret, $logger);
+                TalkHelper::sendReply($replyText, $roomToken, $messageId, $ncUrl, $secret, $logger);
                 exit;
             } elseif (in_array($answer, ['reset', 'no', 'n'])) {
                 // User wants to reset – discard reuse data and continue fresh onboarding (stage 1)
@@ -397,7 +335,7 @@ if ($roomConfig['onboarding_done'] == false) {
                 // Continue with normal onboarding below
             } else {
                 // Ask again if unclear
-                sendReply("Please reply with 'use' to reuse your previous settings or 'reset' to start over.", $roomToken, $messageId, $ncUrl, $secret, $logger);
+                TalkHelper::sendReply("Please reply with 'use' to reuse your previous settings or 'reset' to start over.", $roomToken, $messageId, $ncUrl, $secret, $logger);
                 exit;
             }
         }
@@ -423,7 +361,7 @@ if ($roomConfig['onboarding_done'] == false) {
         ]);
 
         $logger->info('Sending first onboarding question', ['question' => $nextStep['question']]);
-        $success = sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
+        $success = TalkHelper::sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
         if (!$success) {
             $logger->error('Failed to send onboarding reply');
         }
@@ -457,7 +395,7 @@ if ($roomConfig['onboarding_done'] == false) {
             'helpMessage' => $helpMessage
         ]);
         
-        sendReply($helpMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
+        TalkHelper::sendReply($helpMessage, $roomToken, $messageId, $ncUrl, $secret, $logger);
         exit;
     }
 
@@ -487,7 +425,7 @@ if ($roomConfig['onboarding_done'] == false) {
                 ]);
 
                 $reuseQuestion = "I found previous onboarding answers for you. Reply 'use' to reuse them or 'reset' to start fresh.";
-                sendReply($reuseQuestion, $roomToken, $messageId, $ncUrl, $secret, $logger);
+                TalkHelper::sendReply($reuseQuestion, $roomToken, $messageId, $ncUrl, $secret, $logger);
                 exit;
             }
         } catch (\Throwable $e) {
@@ -501,7 +439,7 @@ if ($roomConfig['onboarding_done'] == false) {
     $nextStep = $onboardingManager->getNextQuestion($roomConfig, $detectedBot);
 
     $logger->info('Sending onboarding question', ['question' => $nextStep['question']]);
-    $success = sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
+    $success = TalkHelper::sendReply($nextStep['question'], $roomToken, $messageId, $ncUrl, $secret, $logger);
     if (!$success) {
         $logger->error('Failed to send onboarding reply');
     }
@@ -604,6 +542,8 @@ if ($roomConfigForPrompt) {
     $onboardingContext .= "Chat Type: " . ($isGroup ? "Group Chat" : "Direct Message") . "\n";
     $onboardingContext .= "Bot Interaction Style: " . ($mentionMode === 'always' ? "Respond to every message" : "Respond only when mentioned (" . $detectedBot['mention_name'] . ")") . "\n";
 
+    $answers = $meta['answers'] ?? []; // Ensure answers are available here as well
+
     $questionsRaw = $isGroup
         ? ($detectedBot['onboarding_group_questions'] ?? '[]')
         : ($detectedBot['onboarding_dm_questions'] ?? '[]');
@@ -628,38 +568,34 @@ foreach ($history as $msg) {
     $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
 }
 
-$logger->info('Sending request to LLM', ['model' => $model, 'The complete LLM message' => $messages]);
+$logger->info('Preparing to queue LLM request', ['model' => $model, 'messageCount' => count($messages)]);
 
-try {
-    $llmResponse = $apiClient->getChatCompletions($model, $messages);
-    $logger->info('LLM response received', [
-        'hasChoices' => isset($llmResponse['choices']),
-        'fullResponse' => $llmResponse
-    ]);
-    
-    $replyContent = $llmResponse['choices'][0]['message']['content'] ?? 'Sorry, I encountered an error and cannot reply right now.';
-    
-    $logger->info('Reply content extracted', [
-        'replyContent' => $replyContent,
-        'replyLength' => strlen($replyContent),
-        'firstChars' => substr($replyContent, 0, 50)
-    ]);
-} catch (Exception $e) {
-    $logger->error('Error calling LLM API', ['error' => $e->getMessage()]);
-    $replyContent = 'Sorry, I encountered an error and cannot reply right now.';
+// --- 7. Queue LLM Job ---
+$jobData = [
+    'model' => $model,
+    'messages' => $messages,
+    'roomToken' => $roomToken,
+    'replyToId' => $messageId,
+    'ncUrl' => $ncUrl,
+    'secret' => $secret,
+    'botId' => $currentBotId
+];
+
+$jobId = uniqid('job_', true);
+$jobFilePath = APP_ROOT . '/cache/queue/pending/' . $jobId . '.json';
+
+if (file_put_contents($jobFilePath, json_encode($jobData, JSON_PRETTY_PRINT))) {
+    $logger->info('Successfully queued LLM job', ['jobId' => $jobId, 'filePath' => $jobFilePath]);
+} else {
+    $logger->error('Failed to write job file to queue', ['filePath' => $jobFilePath]);
+    // Optionally, send a failure message back to the user
+    $failMsg = "Sorry, I couldn't process your request right now due to a temporary issue with my internal queue. Please try again in a moment.";
+    TalkHelper::sendReply($failMsg, $roomToken, $messageId, $ncUrl, $secret, $logger);
 }
 
-// --- 7. Reply ---
-// Store assistant message
-$stmt = $db->prepare("INSERT INTO bot_conversations (room_token, user_id, role, content, bot_id) VALUES (?, ?, 'assistant', ?, ?)");
-$stmt->execute([$roomToken, 'assistant', $replyContent, $currentBotId]);
-
-// Send reply to Nextcloud
-$logger->info('Sending final reply', ['replyLength' => strlen($replyContent)]);
-$success = sendReply($replyContent, $roomToken, $messageId, $ncUrl, $secret, $logger);
-
-if (!$success) {
-    $logger->error('Failed to send final reply to Nextcloud');
-} else {
-    $logger->info('Successfully completed message processing');
-} 
+// --- 8. Respond to Webhook ---
+// Immediately respond to the webhook to prevent timeouts.
+// The actual work will be done by the background worker.
+http_response_code(200);
+$logger->info('Webhook handler finished, job queued.');
+exit('Request queued.'); 

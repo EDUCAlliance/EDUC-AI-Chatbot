@@ -16,6 +16,7 @@ use NextcloudBot\Helpers\Session;
 use NextcloudBot\Services\ApiClient;
 use NextcloudBot\Services\EmbeddingService;
 use NextcloudBot\Services\VectorStore;
+use NextcloudBot\Services\WorkerManager;
 
 require __DIR__ . '/../src/bootstrap.php';
 
@@ -31,8 +32,10 @@ $twig = Twig::create(__DIR__ . '/templates', ['cache' => false]);
 Session::start();
 $twig->getEnvironment()->addGlobal('session', $_SESSION['nextcloud_bot_session'] ?? []);
 
-// Make app directory available to all templates for proper asset paths
+// Make app directory and base URL available to all templates
 $twig->getEnvironment()->addGlobal('app_directory', getenv('APP_DIRECTORY') ?: 'educ-ai-chatbot');
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https" : "http";
+$twig->getEnvironment()->addGlobal('base_url', $protocol . '://' . $_SERVER['HTTP_HOST']);
 
 // The `url_for` function in Twig needs the RouteParser, which TwigMiddleware adds to the container
 $app->add(TwigMiddleware::create($app, $twig));
@@ -43,6 +46,7 @@ $logger = new \NextcloudBot\Helpers\Logger();
 $apiClient = new ApiClient(getenv('AI_API_KEY'), getenv('AI_API_ENDPOINT') ?: 'https://chat-ai.academiccloud.de/v1', $logger);
 $vectorStore = new VectorStore($db);
 $embeddingService = new EmbeddingService($apiClient, $vectorStore, $logger, $db);
+$workerManager = new WorkerManager($logger, $apiClient, $db);
 
 try {
     $db->query("SELECT 1 FROM bot_admin LIMIT 1");
@@ -342,7 +346,7 @@ $app->get('/logout', function (Request $request, Response $response) use ($app) 
     return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('login'))->withStatus(302);
 })->setName('logout');
 
-$app->get('/', function (Request $request, Response $response) use ($twig, $db) {
+$app->get('/', function (Request $request, Response $response) use ($twig, $db, $workerManager) {
     $stats = [
         'bots' => $db->query("SELECT COUNT(*) FROM bots")->fetchColumn(),
         'docs' => $db->query("SELECT COUNT(*) FROM bot_docs")->fetchColumn(),
@@ -350,7 +354,18 @@ $app->get('/', function (Request $request, Response $response) use ($twig, $db) 
         'conversations' => $db->query("SELECT COUNT(*) FROM bot_conversations")->fetchColumn(),
         'rooms' => $db->query("SELECT COUNT(*) FROM bot_room_config")->fetchColumn(),
     ];
-    return $twig->render($response, 'dashboard.twig', ['stats' => $stats, 'currentPage' => 'dashboard']);
+    $queueStats = $workerManager->getQueueStats();
+    $stats['pending_jobs'] = $queueStats['pending'];
+
+    // Retrieve flash messages
+    $flash = $_SESSION['flash'] ?? [];
+    unset($_SESSION['flash']);
+
+    return $twig->render($response, 'dashboard.twig', [
+        'stats' => $stats, 
+        'currentPage' => 'dashboard',
+        'flash' => $flash
+    ]);
 })->setName('dashboard')->add($authMiddleware);
 
 // Bot management routes
@@ -976,6 +991,38 @@ $app->get('/rag-settings', function (Request $request, Response $response) use (
     // Redirect to bots management page
     return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('bots'))->withStatus(302);
 })->setName('rag-settings')->add($authMiddleware);
+
+// Queue Management Routes
+$app->get('/queue', function (Request $request, Response $response) use ($twig, $workerManager) {
+    $stats = $workerManager->getQueueStats();
+    
+    // Retrieve flash messages
+    $flash = $_SESSION['flash'] ?? [];
+    unset($_SESSION['flash']);
+    
+    return $twig->render($response, 'queue.twig', [
+        'stats' => $stats,
+        'currentPage' => 'queue',
+        'flash' => $flash
+    ]);
+})->setName('queue')->add($authMiddleware);
+
+$app->post('/queue/process', function (Request $request, Response $response) use ($workerManager, $app) {
+    $result = $workerManager->processQueue();
+    $_SESSION['flash']['success'] = sprintf('Processed %d jobs. %d failed.', $result['processed'], $result['failed']);
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('queue'))->withStatus(302);
+})->setName('queue-process')->add($authMiddleware);
+
+$app->post('/queue/clear', function (Request $request, Response $response) use ($workerManager, $app) {
+    $queueToClear = $request->getParsedBody()['queue'] ?? '';
+    if (in_array($queueToClear, ['completed', 'failed'])) {
+        $workerManager->clearQueue($queueToClear);
+        $_SESSION['flash']['success'] = "Cleared the {$queueToClear} queue.";
+    } else {
+        $_SESSION['flash']['error'] = 'Invalid queue specified for clearing.';
+    }
+    return $response->withHeader('Location', $app->getRouteCollector()->getRouteParser()->urlFor('queue'))->withStatus(302);
+})->setName('queue-clear')->add($authMiddleware);
 
 // Helper function to read log entries
 function getLogEntries(int $limit = 100): array {

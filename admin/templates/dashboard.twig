@@ -26,6 +26,12 @@
             <p class="heading">Configured Rooms</p>
             <p class="title">{{ stats.rooms }}</p>
         </div>
+        <div class="stat-card is-warning">
+            <a href="{{ url_for('queue') }}">
+                <p class="heading">Pending Jobs</p>
+                <p class="title">{{ stats.pending_jobs }}</p>
+            </a>
+        </div>
     </div>
 
     <div class="box">
