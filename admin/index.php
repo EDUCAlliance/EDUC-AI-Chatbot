@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 // The deployment system generates this file to load all environment variables.
-if (file_exists(__DIR__ . '/../auto-include.php')) {
+if (file_exists(__DIR__ . '/../educ-bootstrap.php')) {
+    require_once __DIR__ . '/../educ-bootstrap.php';
+} elseif (file_exists(__DIR__ . '/../auto-include.php')) {
     require_once __DIR__ . '/../auto-include.php';
 }
 
